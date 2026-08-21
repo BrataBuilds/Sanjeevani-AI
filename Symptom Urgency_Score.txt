@@ -1,0 +1,11 @@
+Symptom    Urgency_Score
+Fever 98F mild     10
+Fever 105F    100
+Rash in chest      20
+Fungal Infection in foot 50
+
+
+User gives query -> AI makes a report -> Hospital Admin verifies -> Makes changes -> User verifies -> both accept -> Registration
+                                                    if approved -> Registration
+
+User App, Hospital Admin Dashboard, Doctor Dashboard
