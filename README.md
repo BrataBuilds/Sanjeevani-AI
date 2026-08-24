@@ -31,3 +31,4 @@ Right now AI is only capable of making amateur level diagnosis, but falls apart 
 2. **Enabling streamlined process and ease of use**: One click everything, reduces overhead for all users, hospitals, and doctors.
 3. **Privacy focused**, no data is stored on external servers/shared with third parties without consent. Everything is stored locally.
 4. **Human in the loop enabled**, no false positives, ensure critical decisions are always made by a professional.
+## Tech Stack
