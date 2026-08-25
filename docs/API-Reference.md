@@ -73,7 +73,7 @@ Both surfaces, one set of endpoints. `kind` is `ai` (triage assistant) or `care_
 | GET | `/conversations` | P D A | Patients: their threads. Staff: `care_team` threads at their hospital. |
 | POST | `/conversations` | P | `{kind, hospital_id?, title?, force_new?}`. `kind:"ai"` reuses the existing thread unless `force_new`. `care_team` requires `hospital_id`. A new `ai` thread gets a greeting. |
 | GET | `/conversations/:id` | P D A | Metadata plus `can_post`. |
-| GET | `/conversations/:id/messages?after=&limit=` | P D A | `{messages, triage_pending}`. `after` is an ISO timestamp — pass the newest you hold to poll incrementally. Attachments come back as `file_url`. |
+| GET | `/conversations/:id/messages?after=&after_id=&limit=` | P D A | `{messages, triage_pending}`. `after`/`after_id` are one keyset cursor — pass the `created_at` **and** `id` of the newest message you hold, or neither. A timestamp alone is not a valid cursor: every message written by one triage transaction shares a `created_at`. Attachments come back as `file_url`. |
 | POST | `/conversations/:id/messages` | P D | `{body, language?}`. On an `ai` thread from a patient this starts a triage round and returns `{message, triage_pending: true}` immediately. `language` also updates the patient's stored preference. |
 | POST | `/conversations/:id/attachments` | P D | `multipart`: `file`, `body?`. Images and PDFs; `audio/*` is accepted so wiring speech-to-text later needs no client change. |
 | POST | `/conversations/:id/mcq-answer` | P | `{message_id, answers: {question_id: value}}`. Stored as one `mcq_answer` message and starts the next triage round. |

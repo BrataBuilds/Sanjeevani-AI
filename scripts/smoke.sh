@@ -134,6 +134,37 @@ print('  ok  hospital suggestions:', len(hs[0]['payload']['hospitals']) if hs el
 open('./visit.txt','w').write(st['visit_id'])
 " || fail=1
 
+echo "== incremental polling loses nothing and repeats nothing =="
+python -c "
+import json,urllib.parse,urllib.request
+def get(u):
+    return json.load(urllib.request.urlopen(urllib.request.Request(u,headers={'authorization':'Bearer $TOK'})))
+base='$API/conversations/$CONV/messages'
+full=[m['id'] for m in get(base)['messages']]
+# Page two at a time so the walk is forced to cut through the group of messages
+# one triage transaction writes, which all share a created_at to the microsecond.
+seen=[];cur=cid=None
+for _ in range(200):
+    u=base+'?limit=2'+(('&after='+urllib.parse.quote(cur)+'&after_id='+cid) if cur else '')
+    page=get(u)['messages']
+    if not page: break
+    seen+=[m['id'] for m in page]; cur=page[-1]['created_at']; cid=page[-1]['id']
+else:
+    raise SystemExit('  FAIL cursor never advanced past a tie group')
+lost=[i for i in full if i not in seen]
+dup=len(seen)-len(set(seen))
+assert not lost, '  FAIL incremental polling dropped %d message(s)' % len(lost)
+assert not dup, '  FAIL incremental polling re-sent %d message(s)' % dup
+assert full==seen, '  FAIL paged order differs from unpaged order'
+print('  ok  paged walk == full fetch (%d messages, limit=2)' % len(full))
+" || fail=1
+
+echo "== bad cursor is a 400, not a 500 =="
+for q in 'after=5' 'after=2026' 'after_id=nope'; do
+  c=$(code "$API/conversations/$CONV/messages?$q" -H "$A"); chk 400 "$c" "rejects ?$q"
+done
+c=$(code "$API/conversations/$CONV/messages?limit=-5" -H "$A"); chk 200 "$c" "clamps negative limit"
+
 echo "== patient sees own visit =="
 c=$(code "$API/me/visits" -H "$A"); chk 200 "$c" "GET /me/visits"
 python -c "import json;d=json.load(open('./body'));assert len(d)>=1;print('  ok  visits:',len(d),'token',d[0]['token_no'])"

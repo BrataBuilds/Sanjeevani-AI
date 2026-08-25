@@ -209,9 +209,12 @@ class Api {
           as Map<String, dynamic>;
 
   /// `after` is the newest timestamp already held, for incremental polling.
-  Future<Map<String, dynamic>> messages(String conversationId, {String? after}) async =>
-      (await get('/conversations/$conversationId/messages', {'after': ?after}))
-          as Map<String, dynamic>;
+  /// [after]/[afterId] are one keyset cursor — send both or neither. They are the
+  /// created_at and id of the newest message already held.
+  Future<Map<String, dynamic>> messages(String conversationId,
+          {String? after, String? afterId}) async =>
+      (await get('/conversations/$conversationId/messages',
+          {'after': ?after, 'after_id': ?afterId})) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> sendMessage(String conversationId, String body,
           {String? language}) async =>

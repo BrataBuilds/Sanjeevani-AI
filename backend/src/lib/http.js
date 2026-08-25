@@ -59,6 +59,18 @@ export function uuid(value, label = 'id') {
   return value;
 }
 
+// Deliberately stricter than Postgres' own timestamptz parser. If validation and
+// the query disagreed about what a string means, bad input would reach the DB and
+// come back as a 500 instead of a 400.
+const ISO_TS = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:?\d{2})$/;
+
+export function isoTimestamp(value, label = 'timestamp') {
+  if (typeof value !== 'string' || !ISO_TS.test(value)) {
+    throw bad(`${label} must be an ISO timestamp with a timezone, e.g. 2026-08-25T20:57:53.180174Z`);
+  }
+  return value;
+}
+
 export function email(body, field = 'email') {
   const v = str(body, field, { required: true, max: 254 }).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw bad('email is not valid');

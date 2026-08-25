@@ -25,6 +25,7 @@ yarn-error.log*
 web/.next/
 web/out/
 web/next-env.d.ts
+web/tsconfig.tsbuildinfo
 
 # flutter / dart
 app/.dart_tool/

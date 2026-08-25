@@ -62,6 +62,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _loaded = false;
   String? _error;
   String? _newestAt;
+  String? _newestId;
   Timer? _poll;
 
   bool get _isAi => widget.kind == 'ai';
@@ -81,18 +82,34 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  /// Polls for new messages. [full] drops the cursor and re-reads the thread.
+  Future<void> _refresh({bool full = false}) async {
     try {
-      final out = await Api.instance.messages(widget.conversationId, after: _newestAt);
+      final out = await Api.instance.messages(
+        widget.conversationId,
+        after: full ? null : _newestAt,
+        afterId: full ? null : _newestId,
+      );
       if (!mounted) return;
       final incoming = (out['messages'] as List).cast<Map<String, dynamic>>();
+      final wasThinking = _thinking;
+      var grew = false;
       setState(() {
         _error = null;
         _loaded = true;
         _thinking = out['triage_pending'] == true;
         if (incoming.isNotEmpty) {
-          _messages = [..._messages, ...incoming];
+          // A poll tick and the refresh after a send can overlap and fetch the
+          // same page twice, so drop anything already on screen. Built eagerly:
+          // a lazy where() with a mutating predicate would filter differently on
+          // a second read.
+          final seen = full ? <Object?>{} : _messages.map((m) => m['id']).toSet();
+          final fresh =
+              incoming.where((m) => !seen.contains(m['id'])).toList(growable: false);
+          grew = fresh.isNotEmpty;
+          _messages = full ? incoming : [..._messages, ...fresh];
           _newestAt = incoming.last['created_at'] as String;
+          _newestId = incoming.last['id'] as String;
           final status = _messages.lastWhere(
             (m) => m['kind'] == 'status',
             orElse: () => const {},
@@ -100,7 +117,14 @@ class _ChatScreenState extends State<ChatScreen> {
           if (status.isNotEmpty) _latestStatus = status;
         }
       });
-      if (incoming.isNotEmpty) _scrollToEnd();
+      // Only when something was actually appended — a duplicate-only poll must
+      // not yank a patient who has scrolled up back to the bottom.
+      if (grew) _scrollToEnd();
+      // A triage transaction stamps its messages at BEGIN but they only become
+      // visible at COMMIT, so one can land behind a cursor this screen already
+      // moved past. Re-read the thread once when triage finishes rather than
+      // risk silently losing the report and the queue token.
+      if (wasThinking && !_thinking && !full) await _refresh(full: true);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }

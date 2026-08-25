@@ -12,12 +12,15 @@
 import { Router } from 'express';
 import { many, one, query } from '../lib/db.js';
 import { requireAuth, staffHospitalId } from '../lib/auth.js';
-import { bad, enumOf, forbidden, notFound, str, uuid } from '../lib/http.js';
+import { bad, enumOf, forbidden, isoTimestamp, notFound, str, uuid } from '../lib/http.js';
 import { storeFile, upload } from '../lib/upload.js';
 import { runTriage } from '../lib/triage.js';
 import { audit } from '../lib/audit.js';
 
 const router = Router();
+
+/** Sorts before every real uuid, so `after` with no `after_id` starts at that instant. */
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 router.use(requireAuth);
 
 /** Throws unless the caller may see this conversation. Returns {conversation, canPost}. */
@@ -108,29 +111,45 @@ router.get('/:id', async (req, res) => {
   res.json({ ...conversation, can_post: canPost, patient, hospital });
 });
 
-/** ?after=<iso timestamp> for incremental polling; ?limit= caps the page. */
+/**
+ * ?after=<iso>&after_id=<uuid> for incremental polling; ?limit= caps the page.
+ *
+ * The cursor is a keyset on (created_at, id), not a bare timestamp. now() is the
+ * transaction clock, so every message applyTriageResult writes — reply, MCQs,
+ * report, hospital suggestions, status — carries the same created_at down to the
+ * microsecond. With a timestamp alone, a page boundary landing inside one of
+ * those groups either drops its tail forever (strict >) or re-sends it on every
+ * poll (>=). The id breaks the tie and makes the order deterministic.
+ *
+ * created_at goes out at full precision because it is half of the cursor: a JS
+ * Date round-trip would truncate it to milliseconds and the cursor would no
+ * longer match the row it came from.
+ */
 router.get('/:id/messages', async (req, res) => {
   const { conversation } = await access(req.user, req.params.id);
-  const after = req.query.after ? new Date(String(req.query.after)) : null;
-  if (after && Number.isNaN(after.getTime())) throw bad('after must be an ISO timestamp');
-  const limit = Math.min(Number(req.query.limit) || 200, 500);
+  const after = req.query.after ? isoTimestamp(req.query.after, 'after') : null;
+  const afterId = req.query.after_id ? uuid(req.query.after_id, 'after_id') : ZERO_UUID;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
 
-  const rows = await many(
-    `select m.id, m.sender_role, m.sender_user_id, m.kind, m.body, m.payload,
-            m.file_id, m.created_at, u.full_name as sender_name
-       from messages m left join users u on u.id = m.sender_user_id
-      where m.conversation_id = $1 and ($2::timestamptz is null or m.created_at > $2)
-      order by m.created_at
-      limit $3`,
-    [conversation.id, after ? after.toISOString() : null, limit],
-  );
-
-  // Anything still being worked on, so the app can show its "thinking" state.
-  const pending = await one(
-    `select count(*)::int as n from triage_requests
-      where conversation_id = $1 and status = 'pending'`,
-    [conversation.id],
-  );
+  const [rows, pending] = await Promise.all([
+    many(
+      `select m.id, m.sender_role, m.sender_user_id, m.kind, m.body, m.payload, m.file_id,
+              to_char(m.created_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as created_at,
+              u.full_name as sender_name
+         from messages m left join users u on u.id = m.sender_user_id
+        where m.conversation_id = $1
+          and ($2::timestamptz is null or (m.created_at, m.id) > ($2::timestamptz, $3::uuid))
+        order by m.created_at, m.id
+        limit $4`,
+      [conversation.id, after, afterId, limit],
+    ),
+    // Anything still being worked on, so the app can show its "thinking" state.
+    one(
+      `select count(*)::int as n from triage_requests
+        where conversation_id = $1 and status = 'pending'`,
+      [conversation.id],
+    ),
+  ]);
   res.json({ messages: rows.map(withFileUrl), triage_pending: pending.n > 0 });
 });
 
