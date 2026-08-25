@@ -278,7 +278,7 @@ export async function applyTriageResult(requestId, rawResult) {
       urgency: t.urgency,
       red_flag: t.red_flag,
       visit_id: visit?.id ?? null,
-    });
+    }, visit?.hospital_id ?? null);
 
     return { result, visit };
   });

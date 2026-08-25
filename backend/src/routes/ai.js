@@ -15,6 +15,13 @@ import { forbidden, notFound, uuid } from '../lib/http.js';
 const router = Router();
 const SECRET = process.env.AI_CALLBACK_SECRET || '';
 
+// This header is the only gate on every route below, so it gets the same
+// treatment as JWT_SECRET in lib/auth.js. Without this the shipped default is
+// live in any deployment that set JWT_SECRET and stopped there.
+if (SECRET === 'dev-callback-secret' && process.env.NODE_ENV === 'production') {
+  throw new Error('AI_CALLBACK_SECRET must be set to a real value in production');
+}
+
 function requireServiceSecret(req, _res, next) {
   const given = req.get('x-ai-secret') || '';
   const a = Buffer.from(given);

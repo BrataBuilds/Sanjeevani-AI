@@ -227,6 +227,10 @@ create index visits_queue_idx on visits(hospital_id, status, urgency, created_at
 create table audit_log (
   id            bigserial primary key,
   actor_user_id uuid references users(id) on delete set null,
+  -- Whose trail this belongs to. Null means it is no single hospital's business
+  -- (a patient registering, or editing their own profile), and those rows are
+  -- never shown to a hospital admin. Staff read the log scoped to this column.
+  hospital_id   uuid references hospitals(id) on delete set null,
   action        text not null,
   entity        text,
   entity_id     uuid,
@@ -234,3 +238,4 @@ create table audit_log (
   created_at    timestamptz not null default now()
 );
 create index audit_log_created_idx on audit_log(created_at desc);
+create index audit_log_hospital_idx on audit_log(hospital_id, id desc);

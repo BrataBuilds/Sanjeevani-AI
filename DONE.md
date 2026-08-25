@@ -139,6 +139,19 @@ Google sign-in has never run against a real Google project — it needs
 | Appointment slots, SMS/IVR, proxy accounts, pharmacy, teleconsultation | Phase 2–3. |
 | Redis, object storage, Kubernetes | Overridden — Postgres only, Docker Compose. |
 
+## Security fixes applied after review
+
+A security review of the merged branch confirmed four issues; all four are fixed.
+
+| Issue | Fix |
+|---|---|
+| `GET /admin/audit` had no hospital filter — any hospital's admin could read every other hospital's trail: patient names, triage answers, urgency, staff emails | `audit_log` gained `hospital_id`; the route scopes on it. Events belonging to no hospital (patient register/login/profile) are null and never listed. `chat.mcq_answered` no longer copies raw symptom answers into the audit detail. |
+| `AI_CALLBACK_SECRET` defaulted to a published literal with no production guard, unlike `JWT_SECRET`. That header is the only gate on `/ai/*`, which reads pending triage payloads and writes into a patient's chat | Same fail-fast guard as `JWT_SECRET`. Default removed from compose and `.env.example`; empty now rejects every `/ai/*` call. |
+| `JWT_SECRET`'s guard fired only under `NODE_ENV=production`, which the Dockerfile sets but `npm run dev`/`npm start` do not — a host-run instance signed sessions with a repo constant | Guard is unconditional and there is no fallback. Missing or default secret refuses to start on every run path. |
+| `docker compose up` unconditionally seeded staff accounts sharing one well-known password | `SEED_DEMO_DATA=false` skips the demo data. Still on by default so the demo works out of the box. |
+
+Changing the schema means `docker compose down -v`.
+
 ## Known shortcuts
 
 Marked with `ponytail:` comments in the source — 4 of them.

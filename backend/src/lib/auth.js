@@ -4,11 +4,15 @@ import { OAuth2Client } from 'google-auth-library';
 import { one } from './db.js';
 import { forbidden, unauthorized } from './http.js';
 
-const SECRET = process.env.JWT_SECRET || 'dev-only-change-me';
+// No fallback and no NODE_ENV condition. The old guard only fired when NODE_ENV
+// was 'production', which the Dockerfile sets but `npm run dev` and `npm start`
+// do not -- so a host-run instance silently signed every session with a constant
+// committed to this repository. A missing signing key is fatal everywhere.
+const SECRET = process.env.JWT_SECRET;
 const TTL = process.env.JWT_TTL || '30d';
 
-if (SECRET === 'dev-only-change-me' && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET must be set in production');
+if (!SECRET || SECRET === 'dev-only-change-me') {
+  throw new Error('JWT_SECRET must be set to a real value -- see .env.example');
 }
 
 export const hashPassword = (plain) => bcrypt.hash(plain, 10);

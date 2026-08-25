@@ -22,7 +22,7 @@ Files that implement this contract:
 | `AI_SERVICE_URL` | Unset → the local stub answers, so the app is fully demoable with no AI service. Set → the backend `POST`s to `{AI_SERVICE_URL}/triage`. |
 | `AI_SERVICE_TOKEN` | Sent as `Authorization: Bearer …` on the outbound call. Optional. |
 | `AI_TIMEOUT_MS` | Outbound request timeout, default `20000`. |
-| `AI_CALLBACK_SECRET` | Shared secret the AI service must send as `x-ai-secret` on every inbound call. |
+| `AI_CALLBACK_SECRET` | Shared secret the AI service must send as `x-ai-secret` on every inbound call. Generate a real one — the backend refuses to start in production with the former shipped default, and an empty value rejects every `/ai/*` call. |
 | `PUBLIC_API_URL` | Used to build the `callback_url` the AI service is told to answer on. |
 
 Check which mode a running backend is in:
@@ -275,7 +275,7 @@ banner saying the values are samples.
 docker compose up -d db
 cd backend
 AI_SERVICE_URL=http://localhost:9000 \
-AI_CALLBACK_SECRET=dev-callback-secret \
+AI_CALLBACK_SECRET="$AI_CALLBACK_SECRET" \
 PUBLIC_API_URL=http://localhost:4000 \
 npm run dev
 ```
@@ -294,7 +294,7 @@ curl -s -XPOST "localhost:4000/conversations/$CONV/messages" \
   -d '{"body":"chest pain and breathlessness"}'
 
 # what your service was actually sent
-curl -s "localhost:4000/ai/pending" -H 'x-ai-secret: dev-callback-secret' | jq
+curl -s "localhost:4000/ai/pending" -H "x-ai-secret: $AI_CALLBACK_SECRET" | jq
 ```
 
 `bash scripts/smoke.sh` walks the whole journey and asserts the results, including the

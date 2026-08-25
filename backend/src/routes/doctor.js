@@ -152,7 +152,7 @@ router.patch('/visits/:id', async (req, res) => {
     ai_urgency: before.urgency,
     notes_changed: notes !== undefined,
     claimed: claim || undefined,
-  });
+  }, hospitalId);
 
   res.json(after);
 });

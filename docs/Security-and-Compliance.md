@@ -21,7 +21,12 @@ real patient.
   `email_verified`. Nothing Google-issued is trusted past that point — the backend mints
   its own JWT.
 - Login returns the same 401 whether the email is unknown or the password is wrong.
-- The server refuses to start in production with the default `JWT_SECRET`.
+- The server refuses to start unless `JWT_SECRET` is set to a real value. There is no
+  fallback and no `NODE_ENV` condition: the guard used to fire only under
+  `NODE_ENV=production`, which the Dockerfile sets but `npm run dev` and `npm start` do
+  not, so a host-run instance silently signed sessions with a constant from this repo.
+- `AI_CALLBACK_SECRET` has the same guard against its former shipped default. Left empty
+  it fails closed — every `/ai/*` call is rejected.
 
 ### Authorisation
 Three rules, asserted by `scripts/smoke.sh`:
@@ -145,6 +150,7 @@ degrades elsewhere recreates the inequity it exists to fix.
 
 - [ ] TLS everywhere; remove the debug cleartext and `NSAllowsLocalNetworking`
 - [ ] Real `JWT_SECRET`, `AI_CALLBACK_SECRET`, `POSTGRES_PASSWORD` from a secret store
+- [ ] `SEED_DEMO_DATA=false` — the demo staff accounts share one well-known password
 - [ ] Postgres not publicly reachable; disk encryption on
 - [ ] Rate limiting on auth and upload routes
 - [ ] Consent capture, purpose statement, withdrawal, retention policy

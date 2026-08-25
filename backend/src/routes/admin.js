@@ -146,7 +146,7 @@ router.post('/departments', async (req, res) => {
     'insert into departments (hospital_id, name, specialty) values ($1,$2,$3) returning *',
     [hospitalId, name, specialty],
   );
-  audit(req.user.id, 'admin.department_created', 'department', dept.id, { name, specialty });
+  audit(req.user.id, 'admin.department_created', 'department', dept.id, { name, specialty }, hospitalId);
   res.status(201).json(dept);
 });
 
@@ -205,7 +205,7 @@ router.post('/doctors', async (req, res) => {
     return u;
   });
 
-  audit(req.user.id, 'admin.doctor_created', 'user', created.id, { email, departmentId });
+  audit(req.user.id, 'admin.doctor_created', 'user', created.id, { email, departmentId }, hospitalId);
   res.status(201).json(created);
 });
 
@@ -246,7 +246,7 @@ router.patch('/doctors/:id', async (req, res) => {
 
   audit(req.user.id, 'admin.doctor_updated', 'user', userId, {
     department_id: departmentId, is_available: isAvailable, is_active: isActive,
-  });
+  }, hospitalId);
 
   res.json(await one(
     `select d.user_id, u.full_name, u.email, u.is_active, d.specialty, d.reg_no,
@@ -257,15 +257,19 @@ router.patch('/doctors/:id', async (req, res) => {
     [userId]));
 });
 
-/** Recent trail: AI recommendations, doctor overrides, staff changes. */
+/** Recent trail for this admin's own hospital: AI recommendations, doctor
+ *  overrides, staff changes. Rows with no hospital (a patient registering or
+ *  editing their own profile) belong to no hospital and are never listed. */
 router.get('/audit', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const hospitalId = await staffHospitalId(req.user);
   res.json(await many(
     `select a.id, a.action, a.entity, a.entity_id, a.detail, a.created_at,
             u.full_name as actor_name, u.role as actor_role
        from audit_log a left join users u on u.id = a.actor_user_id
-      order by a.id desc limit $1`,
-    [limit]));
+      where a.hospital_id = $1
+      order by a.id desc limit $2`,
+    [hospitalId, limit]));
 });
 
 export default router;

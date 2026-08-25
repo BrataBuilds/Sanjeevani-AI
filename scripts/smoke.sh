@@ -10,7 +10,10 @@
 set -u
 cd "$(dirname "$0")"
 API="${API:-http://localhost:4000}"
-SECRET="${AI_CALLBACK_SECRET:-dev-callback-secret}"
+# Falls back to ../.env so this matches whatever the running backend loaded.
+# No default: the secret is per-deployment now, and asserting against a guessed
+# one would just fail confusingly.
+SECRET="${AI_CALLBACK_SECRET:-$(sed -n 's/^AI_CALLBACK_SECRET=//p' ../.env 2>/dev/null | tr -d '')}"
 J='content-type: application/json'
 fail=0
 chk() { if [ "$1" = "$2" ]; then echo "  ok  $3"; else echo "  FAIL $3 (want $1 got $2)"; fail=1; fi; }
@@ -246,7 +249,12 @@ import json;d=json.load(open('./body'))
 acts={x['action'] for x in d}
 for want in ('triage.result_applied','visit.updated','admin.doctor_created'):
     assert want in acts, (want, sorted(acts))
-print('  ok  audit has', len(d), 'entries incl triage + override + provisioning')"
+# The trail is scoped to the caller's hospital. This run registered a patient and
+# saved their profile; those belong to no hospital and must not appear here, or
+# the scope filter is off and one hospital's admin is reading the whole platform.
+leaked = acts & {'auth.register','auth.login','patient.profile_updated','patient.aadhaar_mock_verified'}
+assert not leaked, '  FAIL unscoped rows in the hospital audit trail: %s' % sorted(leaked)
+print('  ok  audit has', len(d), 'entries, all hospital-scoped')"
 
 echo "== admin scoped to own hospital =="
 c=$(code "$API/doctor/queue" -H "$AD"); chk 403 "$c" "admin blocked from doctor queue"
@@ -255,6 +263,10 @@ echo "== ai seam =="
 c=$(code "$API/ai/health"); chk 200 "$c" "ai health"
 python -c "import json;d=json.load(open('./body'));assert d['triage_backend']=='stub';print('  ok  triage backend:',d['triage_backend'])"
 c=$(code "$API/ai/pending"); chk 403 "$c" "ai routes need secret"
+if [ -z "$SECRET" ]; then
+  echo "  skip AI_CALLBACK_SECRET is empty - skipping the authenticated /ai/* checks"
+  echo "       (set it in .env, restart the backend, and rerun to cover them)"
+else
 c=$(code "$API/ai/pending" -H "x-ai-secret: $SECRET"); chk 200 "$c" "ai pending with secret"
 c=$(code "$API/ai/pending" -H "x-ai-secret: wrong"); chk 403 "$c" "wrong secret"
 
@@ -270,6 +282,7 @@ d=json.load(urllib.request.urlopen(r))
 print('  ok  pending queue visible to service:',len(d))"
 c=$(code -X POST "$API/ai/triage-callback" -H "$J" -H "x-ai-secret: $SECRET" -d '{"request_id":"11111111-1111-1111-1111-111111111111"}')
 chk 404 "$c" "callback for unknown request"
+fi
 
 echo "== 404 =="
 c=$(code "$API/nope"); chk 404 "$c" "unknown route"

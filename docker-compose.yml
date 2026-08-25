@@ -7,13 +7,20 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-sanjeevani}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanjeevani}
       POSTGRES_DB: ${POSTGRES_DB:-sanjeevani}
+      # false on anything holding real patients -- the demo staff accounts share
+      # one well-known password
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
     ports:
       # host 5433 so a local postgres on 5432 keeps working
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # *.sql here run once, in filename order, on an empty data directory
-      - ./db:/docker-entrypoint-initdb.d:ro
+      # These run once, in filename order, on an empty data directory. seed.sql is
+      # mounted outside this directory on purpose so it runs only through the
+      # wrapper, which honours SEED_DEMO_DATA.
+      - ./db/01-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/02-seed.sh:/docker-entrypoint-initdb.d/02-seed.sh:ro
+      - ./db/seed.sql:/seed/seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sanjeevani} -d ${POSTGRES_DB:-sanjeevani}"]
       interval: 5s
@@ -30,11 +37,11 @@ services:
     environment:
       PORT: 4000
       DATABASE_URL: postgres://${POSTGRES_USER:-sanjeevani}:${POSTGRES_PASSWORD:-sanjeevani}@db:5432/${POSTGRES_DB:-sanjeevani}
-      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      JWT_SECRET: ${JWT_SECRET:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
-      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-dev-callback-secret}
+      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "${API_PORT:-4000}:4000"

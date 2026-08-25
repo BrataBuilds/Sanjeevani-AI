@@ -109,7 +109,7 @@ All scoped to the admin's own hospital.
 | GET | `/admin/doctors` | Staff with department, duty flag, and today's queue count. |
 | POST | `/admin/doctors` | `{email, full_name, password, department_id?, specialty?, reg_no?}`. **The only way a doctor account is created** — staff never self-register. |
 | PATCH | `/admin/doctors/:id` | `{department_id?, is_available?, is_active?}`. |
-| GET | `/admin/audit?limit=` | Recent audit entries with actor and detail. |
+| GET | `/admin/audit?limit=` | Recent audit entries with actor and detail, **scoped to the caller's hospital**. Entries that belong to no hospital (a patient registering or editing their own profile) are never listed. |
 
 ## AI seam — `/ai`
 

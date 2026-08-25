@@ -1,6 +1,7 @@
 # Data Model
 
-PostgreSQL 17. Source of truth: `db/01-schema.sql`, demo data in `db/02-seed.sql`.
+PostgreSQL 17. Source of truth: `db/01-schema.sql`, demo data in `db/seed.sql`, loaded by
+`db/02-seed.sh` unless `SEED_DEMO_DATA=false`.
 Both run once, on the container's first boot.
 
 Conventions:
@@ -209,6 +210,11 @@ Actions written today: `auth.register`, `auth.login`, `patient.profile_updated`,
 `patient.aadhaar_mock_verified`, `chat.mcq_answered`, `triage.result_applied`,
 `triage.failed`, `visit.updated`, `admin.department_created`, `admin.doctor_created`,
 `admin.doctor_updated`.
+
+`hospital_id` is what `GET /admin/audit` scopes on. It is null for events that belong to
+no single hospital — a patient registering, logging in, editing their own profile — and
+those rows are never shown to a hospital admin. An admin's trail is their own hospital's
+activity, not the platform's.
 
 `visit.updated` records both the AI's urgency and the doctor's, so a disagreement is
 visible without diffing rows. Logging failures are swallowed — an audit write never

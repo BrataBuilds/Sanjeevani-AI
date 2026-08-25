@@ -51,9 +51,15 @@ cd SIH2026-Smart-Health-App
 cp .env.example .env
 ```
 
-The defaults in `.env.example` work as-is. Two are placeholders you must replace before
-anything leaves your machine: `JWT_SECRET` and `AI_CALLBACK_SECRET`. The backend refuses
-to start in production with the default `JWT_SECRET`.
+Most defaults work as-is, but **`JWT_SECRET` ships empty and the backend refuses to
+start without it** — on every run path, not just in Docker. Generate one:
+
+```bash
+node -e "console.log(crypto.randomBytes(32).toString('hex'))"
+```
+
+Paste it into `.env`. Do the same for `AI_CALLBACK_SECRET` if you will connect a real
+AI service; left empty, every `/ai/*` call is rejected, which is the safe default.
 
 `.env` is gitignored. `.env.example` is the tracked template — keep them in step when you
 add a variable.
@@ -67,8 +73,12 @@ docker compose up -d db
 ```
 
 Postgres 17, **host port 5433** (container 5432 — 5433 so a Postgres already running on
-5432 keeps working). On its first boot the container runs `db/01-schema.sql` and then
-`db/02-seed.sql` out of `docker-entrypoint-initdb.d`.
+5432 keeps working). On its first boot the container runs `db/01-schema.sql`, then
+`db/02-seed.sh`, which loads `db/seed.sql` unless `SEED_DEMO_DATA=false`.
+
+Set `SEED_DEMO_DATA=false` in `.env` for any instance that will hold real patients: the
+demo staff accounts below share one well-known password. You get the schema and an empty
+database.
 
 Confirm it is up and seeded:
 

@@ -261,7 +261,11 @@ router.post('/:id/mcq-answer', async (req, res) => {
     payload: { in_reply_to: questionMessageId, answers },
   });
 
-  audit(req.user.id, 'chat.mcq_answered', 'message', message.id, { answers });
+  // entity_id is the message, which already holds the answers -- copying the
+  // patient's symptom answers into the audit detail duplicates clinical data
+  // into a second table with a different read path.
+  audit(req.user.id, 'chat.mcq_answered', 'message', message.id,
+    { answered: Object.keys(answers).length }, conversation.hospital_id);
   await afterPost(conversation, { triggerTriage: conversation.kind === 'ai' });
   res.status(201).json({ message, triage_pending: true });
 });
