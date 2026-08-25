@@ -143,5 +143,5 @@ sleep 1
 curl -s "$API/conversations/$CONV/messages" -H "$A" | jq '.messages[] | {kind, body}'
 ```
 
-`scripts/smoke.sh` is the same flow with 73 assertions, including the access-control
+`scripts/smoke.sh` is the same flow with 78 assertions, including the access-control
 boundaries. Run it after touching any route.

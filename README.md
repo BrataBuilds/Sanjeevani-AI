@@ -66,6 +66,10 @@ cd app     && flutter run                    # or: flutter run -d chrome
 
 Or `docker compose up` for db + API + console together.
 
+First time on this machine, or putting the app on a physical phone?
+**[SETUP.md](SETUP.md)** has the full walkthrough — prerequisites, device setup,
+verification, and troubleshooting.
+
 Seeded accounts, all with password `password123`:
 
 | Role | Email |
@@ -97,7 +101,7 @@ cd backend && npm test          # pure-logic unit tests, no DB
 cd app     && flutter test      # client unit + widget tests
 cd app     && flutter analyze
 cd web     && npm run build     # typechecks and builds
-bash scripts/smoke.sh           # 73 end-to-end assertions; needs db + backend up
+bash scripts/smoke.sh           # 78 end-to-end assertions; needs db + backend up
 ```
 
 `scripts/smoke.sh` walks register → profile → document upload → triage chat → MCQ answers
@@ -118,4 +122,5 @@ analytics → audit trail, and asserts the access-control boundaries.
   (`Symptom Urgency_Score.txt` uses 0–100, the design doc implies a 1–5 tier; the code
   currently uses 1–5) and whether registration should wait for hospital-admin approval.
 
+Setting up for the first time: **[SETUP.md](SETUP.md)**.
 Developer documentation: **[wiki](../../wiki)**.

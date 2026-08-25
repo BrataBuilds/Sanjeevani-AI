@@ -20,6 +20,7 @@ instead of a blank slate.
 | `db/` | Schema + demo seed | PostgreSQL 17, applied on first container boot |
 | `scripts/smoke.sh` | End-to-end check of the whole journey | bash + curl |
 | `docs/` | These pages | |
+| `SETUP.md` | Source of the [Setup](Setup) page — edit it there, not here | |
 | `RAG/` | Triage / retrieval layer | Python — separate team, currently empty |
 | `Design docs/` | Problem statement, design doc, feature set, workflows | |
 
@@ -32,7 +33,7 @@ plugs into a documented seam — see **[AI Integration Contract](AI-Integration-
 
 | I want to… | Page |
 |---|---|
-| Run the whole thing locally | [Getting Started](Getting-Started) |
+| Run the whole thing locally | [Setup](Setup) |
 | Understand how the pieces fit | [Architecture](Architecture) |
 | Plug in the triage model | [AI Integration Contract](AI-Integration-Contract) |
 | Know what every table holds | [Data Model](Data-Model) |

@@ -92,7 +92,7 @@ Platform config done: Android `INTERNET` + location permissions, cleartext HTTP 
 Nothing here computes a specialty, an urgency score, or a red flag.
 
 ### Docs — `docs/` → wiki
-Home, Getting Started, Architecture, Data Model, API Reference, AI Integration Contract,
+Home, Setup, Architecture, Data Model, API Reference, AI Integration Contract,
 Patient App, Staff Web Console, Feature Coverage, Security and Compliance, plus sidebar
 and footer.
 
@@ -107,7 +107,7 @@ and footer.
 | `cd app && flutter test` | 5 pass |
 | `cd app && flutter build web` | Compiles |
 | `cd web && npm run build` | Typechecks, 11 routes |
-| `bash scripts/smoke.sh` | **73/73 pass** |
+| `bash scripts/smoke.sh` | **78/78 pass** |
 
 The smoke script walks register → profile → document upload → triage chat → MCQ answers
 → report → queue token → doctor queue → urgency override → care-team chat → admin
