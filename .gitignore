@@ -54,3 +54,4 @@ scripts/visit.txt
 # local working copies of the canonical docs under "Design docs/"
 /appfeature.md
 /Design_doc.md
+*.env
