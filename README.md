@@ -32,3 +32,8 @@ Right now AI is only capable of making amateur level diagnosis, but falls apart 
 3. **Privacy focused**, no data is stored on external servers/shared with third parties without consent. Everything is stored locally.
 4. **Human in the loop enabled**, no false positives, ensure critical decisions are always made by a professional.
 ## Tech Stack
+- App : Flutter 
+- Dashboards Doctor/Hospital: Next JS
+- AI : Gemini API, groq, open router, pinecone/chroma db, agno / langchain, 
+- Backend: Dockerized Postgresql, Node, Google OAuth, Docker, Redis, GCP, cloudinary
+- 
