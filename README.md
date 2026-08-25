@@ -36,4 +36,91 @@ Right now AI is only capable of making amateur level diagnosis, but falls apart 
 - Dashboards Doctor/Hospital: Next JS
 - AI : Gemini API, groq, open router, pinecone/chroma db, agno / langchain, 
 - Backend: Dockerized Postgresql, Node, Google OAuth, Docker, Redis, GCP, cloudinary
-- 
+-
+
+---
+
+# Repository
+
+| Path | What | Stack |
+|---|---|---|
+| `app/` | Patient app | Flutter 3.44 — Android, iOS, web |
+| `web/` | Doctor + hospital admin console | Next.js 16 App Router |
+| `backend/` | REST API | Node 24, Express 5, `pg` (raw SQL) |
+| `db/` | Schema + demo seed | PostgreSQL 17 |
+| `RAG/` | Triage / retrieval layer | Python — separate team, see the seam below |
+| `Design docs/` | Problem statement, design doc, feature set, workflows | |
+| `scripts/smoke.sh` | End-to-end check of the whole journey | bash + curl |
+| `docs/` | Source for the [wiki](../../wiki) | |
+
+## Run it
+
+```bash
+cp .env.example .env
+
+docker compose up -d db                      # Postgres on host port 5433, schema + seed applied
+cd backend && npm install && npm run dev     # API on :4000
+cd web     && npm install && npm run dev     # console on :3000
+cd app     && flutter run                    # or: flutter run -d chrome
+```
+
+Or `docker compose up` for db + API + console together.
+
+First time on this machine, or putting the app on a physical phone?
+**[SETUP.md](SETUP.md)** has the full walkthrough — prerequisites, device setup,
+verification, and troubleshooting.
+
+Seeded accounts, all with password `password123`:
+
+| Role | Email |
+|---|---|
+| Patient | `patient@demo.test` |
+| Doctor | `dr.mehta@citygeneral.test` |
+| Hospital admin | `admin@citygeneral.test` |
+
+Doctors and admins cannot self-register — a hospital admin creates them from the console.
+
+## The AI seam
+
+The triage / RAG layer is **not** implemented in the app or backend. The platform exposes
+a documented interface and stores whatever comes back; it never decides a specialty, an
+urgency score, or whether a case is an emergency.
+
+- Unset `AI_SERVICE_URL` and the backend answers from a clearly-labelled stub, so the app
+  and both dashboards are fully demoable with no model connected.
+- Set it and the backend `POST`s the conversation, patient profile, and a distance-sorted
+  hospital list to `{AI_SERVICE_URL}/triage`. Synchronous, async-callback, and
+  worker-pull modes are all supported.
+
+Full contract, with request/response examples: **[AI Integration Contract](../../wiki/AI-Integration-Contract)**.
+
+## Checks
+
+```bash
+cd backend && npm test          # pure-logic unit tests, no DB
+cd app     && flutter test      # client unit + widget tests
+cd app     && flutter analyze
+cd web     && npm run build     # typechecks and builds
+bash scripts/smoke.sh           # 78 end-to-end assertions; needs db + backend up
+```
+
+`scripts/smoke.sh` walks register → profile → document upload → triage chat → MCQ answers
+→ report → queue token → doctor queue → urgency override → care-team chat → admin
+analytics → audit trail, and asserts the access-control boundaries.
+
+## Notes on this build
+
+- **The UI on both frontends is placeholder** — plain Material 3 and one stylesheet, no
+  component library. It is meant to be replaced by the design team. The data model, the
+  API, the access rules, and the AI seam are the parts meant to last.
+- **Stack differs from `Design docs/Design_doc.md` in places**: Node + Express instead of
+  Python + FastAPI, images in Postgres `bytea` instead of an object store, no Redis,
+  Docker Compose instead of Kubernetes. Reasons for each are in the
+  [wiki](../../wiki).
+- **Open questions** that need a decision are listed in
+  [Feature Coverage](../../wiki/Feature-Coverage) — notably the urgency scale
+  (`Symptom Urgency_Score.txt` uses 0–100, the design doc implies a 1–5 tier; the code
+  currently uses 1–5) and whether registration should wait for hospital-admin approval.
+
+Setting up for the first time: **[SETUP.md](SETUP.md)**.
+Developer documentation: **[wiki](../../wiki)**.

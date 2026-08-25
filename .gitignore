@@ -1,4 +1,58 @@
+# editors / tooling / os
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# python (RAG)
 .venv/
 uv.lock
+__pycache__/
+
+# node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# env
+.env
+.env.local
+.env.*.local
+*.pem
+
+# next
+web/.next/
+web/out/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+
+# flutter / dart
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/ios/Pods/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/android/.gradle/
+app/android/local.properties
+app/android/app/google-services.json
+app/ios/Runner/GoogleService-Info.plist
+*.iml
+
+# docker volumes
+pgdata/
+
+# smoke script scratch output
+scripts/body
+scripts/x.png
+scripts/mcq.json
+scripts/visit.txt
+
+# local working copies of the canonical docs under "Design docs/"
+/appfeature.md
+/Design_doc.md
 *.env
