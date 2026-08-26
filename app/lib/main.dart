@@ -5,6 +5,7 @@ import 'screens/app_lock_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_setup_screen.dart';
+import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,12 +21,9 @@ class SanjeevaniApp extends StatelessWidget {
     return MaterialApp(
       title: 'Sanjeevani',
       debugShowCheckedModeBanner: false,
-      // Placeholder theme. The design team replaces this — keep it to one seed colour.
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1C5D99)),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
-      ),
+      theme: sanjeevaniLightTheme,
+      darkTheme: sanjeevaniDarkTheme,
+      themeMode: ThemeMode.system,
       home: const _Gate(),
     );
   }

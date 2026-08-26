@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../app_state.dart';
+import '../theme.dart';
 import '../widgets/authed_image.dart';
 import 'bills_screen.dart';
 import 'profile_setup_screen.dart';
@@ -90,20 +91,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Row(
                         children: [
                           p?['profile_file_id'] == null
-                              ? const CircleAvatar(radius: 30, child: Icon(Icons.person_outline))
+                              ? Container(
+                                  width: 66,
+                                  height: 66,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: context.sc.surface2,
+                                    borderRadius: BorderRadius.circular(SanjeevaniRadius.lg),
+                                  ),
+                                  child: Text(_initialsOf(p?['full_name'] as String?),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .headlineSmall
+                                          ?.copyWith(fontSize: 24, color: context.sc.ink2)),
+                                )
                               : AuthedImage(
                                   path: '/files/${p!['profile_file_id']}',
-                                  width: 60,
-                                  height: 60,
-                                  borderRadius: 30,
+                                  width: 66,
+                                  height: 66,
+                                  borderRadius: SanjeevaniRadius.lg,
                                 ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: SanjeevaniSpace.md),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('${p?['full_name'] ?? ''}',
-                                    style: Theme.of(context).textTheme.titleMedium),
+                                    style: Theme.of(context).textTheme.titleLarge),
                                 Text('${p?['email'] ?? ''}',
                                     style: Theme.of(context).textTheme.bodySmall),
                                 if (p?['aadhaar_verified'] == true)
@@ -214,8 +228,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _heading(String text) => Padding(
         padding: const EdgeInsets.only(top: 22, bottom: 6),
-        child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+        child: Text(text.toUpperCase(), style: Theme.of(context).textTheme.labelSmall),
       );
+
+  static String _initialsOf(String? name) {
+    final parts = (name ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    final initials = parts.length == 1 ? parts[0][0] : '${parts.first[0]}${parts.last[0]}';
+    return initials.toUpperCase();
+  }
 
   Widget _kv(String k, String v) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),

@@ -5,6 +5,7 @@ import '../api.dart';
 import '../app_state.dart';
 import '../location.dart';
 import '../pick_file.dart';
+import '../theme.dart';
 import '../widgets/authed_image.dart';
 
 /// The one-time profile setup from appfeature.md 1.2, reused as the edit screen
@@ -198,8 +199,23 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             Row(
               children: [
                 _photoPath == null
-                    ? const CircleAvatar(radius: 32, child: Icon(Icons.person_outline))
-                    : AuthedImage(path: _photoPath!, width: 64, height: 64, borderRadius: 32),
+                    ? Container(
+                        width: 64,
+                        height: 64,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: context.sc.surface2,
+                          border: Border.all(color: context.sc.line),
+                          borderRadius: BorderRadius.circular(SanjeevaniRadius.md),
+                        ),
+                        child: Icon(Icons.person_outline, color: context.sc.ink3),
+                      )
+                    : AuthedImage(
+                        path: _photoPath!,
+                        width: 64,
+                        height: 64,
+                        borderRadius: SanjeevaniRadius.md,
+                      ),
                 const SizedBox(width: 12),
                 OutlinedButton.icon(
                   onPressed: _pickPhoto,
@@ -414,7 +430,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   Widget _section(String title) => Padding(
         padding: const EdgeInsets.only(top: 24, bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        child: Text(
+          title.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall,
+        ),
       );
 
   static int _ageOf(DateTime dob) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../app_state.dart';
+import '../theme.dart';
 
 /// Sign in / register, plus the Aadhaar screen appfeature.md asks for.
 class LoginScreen extends StatefulWidget {
@@ -55,6 +56,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final state = AppState.instance;
+    final c = context.sc;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
       body: SafeArea(
@@ -68,17 +71,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.local_hospital_outlined, size: 48),
-                    const SizedBox(height: 8),
-                    Text('Sanjeevani',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    Text(
-                      'Describe your problem, get sent to the right doctor.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall,
+                    Container(
+                      width: 46,
+                      height: 46,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: c.acc,
+                        borderRadius: BorderRadius.circular(SanjeevaniRadius.sm),
+                      ),
+                      child: Text('S',
+                          style: TextStyle(
+                              color: c.accInk,
+                              fontFamily: textTheme.displaySmall!.fontFamily,
+                              fontSize: 24)),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: SanjeevaniSpace.md),
+                    Text(_registering ? 'Create your account' : 'Tell us what is wrong',
+                        style: textTheme.displaySmall),
+                    const SizedBox(height: SanjeevaniSpace.sm),
+                    Text(
+                      'In your own words, in your own language. We find the right doctor for you.',
+                      style: textTheme.bodyLarge?.copyWith(color: c.ink2),
+                    ),
+                    const SizedBox(height: SanjeevaniSpace.xxl),
 
                     if (_registering) ...[
                       TextFormField(
@@ -88,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         validator: (v) =>
                             (v == null || v.trim().isEmpty) ? 'Enter your name' : null,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: SanjeevaniSpace.md),
                     ],
 
                     TextFormField(
@@ -99,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       validator: (v) =>
                           (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: SanjeevaniSpace.md),
                     TextFormField(
                       controller: _password,
                       decoration: const InputDecoration(labelText: 'Password'),
@@ -111,17 +126,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
 
                     if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      const SizedBox(height: SanjeevaniSpace.md),
+                      Text(_error!, style: TextStyle(color: c.dan)),
                     ],
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: SanjeevaniSpace.xl),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
                       child: Text(_busy
                           ? 'Please wait…'
                           : (_registering ? 'Create account' : 'Sign in')),
                     ),
+                    const SizedBox(height: SanjeevaniSpace.sm),
                     TextButton(
                       onPressed: _busy
                           ? null
@@ -135,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
 
                     if (state.googleEnabled) ...[
-                      const Divider(height: 28),
+                      const SizedBox(height: SanjeevaniSpace.sm),
                       OutlinedButton.icon(
                         onPressed: _busy
                             ? null
@@ -145,27 +161,28 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
 
-                    const Divider(height: 28),
+                    const SizedBox(height: SanjeevaniSpace.xl),
                     Text(
+                      'Sanjeevani helps you reach the right doctor. It does not diagnose you. '
                       'Aadhaar linking is optional and can be done later from your profile.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: textTheme.bodySmall?.copyWith(color: c.ink3),
                       textAlign: TextAlign.center,
                     ),
                     if (!state.googleEnabled)
                       Padding(
-                        padding: const EdgeInsets.only(top: 12),
+                        padding: const EdgeInsets.only(top: SanjeevaniSpace.sm),
                         child: Text(
                           'Google sign-in is switched off on this server '
                           '(GOOGLE_CLIENT_IDS is not set).',
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: textTheme.bodySmall?.copyWith(color: c.ink3),
                           textAlign: TextAlign.center,
                         ),
                       ),
                     Padding(
-                      padding: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.only(top: SanjeevaniSpace.sm),
                       child: Text(
                         'API: ${Api.baseUrl}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: textTheme.bodySmall?.copyWith(color: c.ink3),
                         textAlign: TextAlign.center,
                       ),
                     ),
