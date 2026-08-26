@@ -4,4 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "agno>=3.0.0",
+    "fastapi[standard]>=0.141.1",
+    "google-genai>=2.20.0",
+    "psycopg[binary]>=3.3.4",
+    "sqlalchemy>=2.0.52",
+]
