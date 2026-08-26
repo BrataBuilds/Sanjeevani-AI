@@ -13,8 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <SessionProvider>
-          <TopBar />
-          <main>{children}</main>
+          <div className="app-shell">
+            <TopBar />
+            <main>{children}</main>
+          </div>
         </SessionProvider>
       </body>
     </html>

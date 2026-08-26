@@ -126,29 +126,32 @@ const WHO: Record<string, string> = {
   system: 'System',
 };
 
+const BUBBLE_CLASS: Record<string, string> = {
+  patient: 'bubble-patient',
+  ai: 'bubble-ai',
+  doctor: 'bubble-doctor',
+  system: 'bubble-system',
+};
+
 function Bubble({ m }: { m: Msg }) {
   return (
-    <div style={{ borderBottom: '1px solid var(--line)', padding: '8px 0' }}>
-      <div className="small muted">
-        {WHO[m.sender_role] ?? m.sender_role}
-        {m.sender_name ? ` · ${m.sender_name}` : ''} · {fmtTime(m.created_at)}
-        {m.kind !== 'text' && <span className="tag" style={{ marginLeft: 6 }}>{m.kind}</span>}
-      </div>
-
-      {m.body && <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>}
+    <div className={`bubble ${BUBBLE_CLASS[m.sender_role] ?? 'bubble-patient'}`}>
+      {m.body && <div className="bubble-body">{m.body}</div>}
 
       {m.kind === 'mcq' && Array.isArray(m.payload?.questions) && (
-        <ul className="plain small">
-          {m.payload.questions.map((q: any) => (
-            <li key={q.id}>
-              {q.question} <span className="muted">[{(q.options ?? []).join(' / ')}]</span>
-            </li>
-          ))}
-        </ul>
+        <div className="bubble-body" style={{ maxWidth: '100%' }}>
+          <ul className="plain small" style={{ margin: 0 }}>
+            {m.payload.questions.map((q: any) => (
+              <li key={q.id}>
+                {q.question} <span className="muted">[{(q.options ?? []).join(' / ')}]</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {m.kind === 'report' && m.payload && (
-        <div className="small">
+        <div className="bubble-body" style={{ maxWidth: '100%' }}>
           <Urgency value={m.payload.urgency} />{' '}
           {m.payload.specialty && <span className="tag">{m.payload.specialty}</span>}
           {m.payload.red_flag && <span className="tag u1"> red flag</span>}
@@ -156,17 +159,25 @@ function Bubble({ m }: { m: Msg }) {
       )}
 
       {m.kind === 'hospital_suggestion' && Array.isArray(m.payload?.hospitals) && (
-        <ul className="plain small">
-          {m.payload.hospitals.map((h: any, i: number) => (
-            <li key={i}>
-              {h.name}
-              {h.distance_km != null ? ` · ${h.distance_km} km` : ''} — {h.reason}
-            </li>
-          ))}
-        </ul>
+        <div className="bubble-body" style={{ maxWidth: '100%' }}>
+          <ul className="plain small" style={{ margin: 0 }}>
+            {m.payload.hospitals.map((h: any, i: number) => (
+              <li key={i}>
+                {h.name}
+                {h.distance_km != null ? ` · ${h.distance_km} km` : ''} — {h.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {m.file_url && <AuthFile path={m.file_url} mime={m.kind === 'audio' ? 'audio/*' : 'image/*'} label="attachment" />}
+
+      <div className="bubble-meta">
+        {WHO[m.sender_role] ?? m.sender_role}
+        {m.sender_name ? ` · ${m.sender_name}` : ''} · {fmtTime(m.created_at)}
+        {m.kind !== 'text' && <span className="tag">{m.kind}</span>}
+      </div>
     </div>
   );
 }

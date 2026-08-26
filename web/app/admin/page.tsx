@@ -42,9 +42,9 @@ function Overview() {
       <div className="grid">
         <Stat n={data.totals.today} k="Registered today" />
         <Stat n={data.totals.in_queue} k="Currently in queue" />
-        <Stat n={data.totals.critical_today} k="Urgency 1 today" />
+        <Stat n={data.totals.critical_today} k="Urgency 1 today" tone="danger" />
         <Stat n={`${data.staff.available}/${data.staff.doctors}`} k="Doctors available" />
-        <Stat n={data.avg_handling_minutes} k="Avg minutes to close" />
+        <Stat n={data.avg_handling_minutes} k="Avg minutes to close" tone="warn" />
         <Stat n={data.totals.all_time} k="Visits all time" />
       </div>
 

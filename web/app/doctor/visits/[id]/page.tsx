@@ -185,60 +185,62 @@ function VisitDetail() {
         </div>
 
         <div>
-          <div className="panel">
-            <h2 style={{ marginTop: 0 }}>Your decision</h2>
-            <p className="small muted">
-              The triage suggestion is never final. Every change here is written to the audit log.
-            </p>
+          <div className="panel panel-decision">
+            <div className="head">Your decision</div>
+            <div className="body">
+              <p className="small muted" style={{ marginTop: 0 }}>
+                The triage suggestion is never final. Every change here is written to the audit log.
+              </p>
 
-            <label htmlFor="urg">Urgency</label>
-            <select id="urg" value={urgency} onChange={(e) => setUrgency(e.target.value)}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <button
-              style={{ marginTop: 8 }}
-              disabled={busy || Number(urgency) === d.visit.urgency}
-              onClick={() => patch({ urgency: Number(urgency) })}
-            >
-              Save urgency
-            </button>
-
-            <label htmlFor="notes" style={{ marginTop: 14 }}>
-              Notes
-            </label>
-            <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <button className="secondary" disabled={busy} onClick={() => patch({ doctor_notes: notes })}>
-              Save notes
-            </button>
-
-            <h2>Queue status</h2>
-            <p>
-              <Status value={d.visit.status} />
-              {d.visit.urgency_overridden && <span className="small muted"> · urgency overridden</span>}
-            </p>
-            <div className="row">
-              {!d.visit.doctor_user_id && (
-                <button disabled={busy} onClick={() => patch({ claim: true })}>
-                  Claim
-                </button>
-              )}
-              {d.visit.status === 'waiting' && (
-                <button disabled={busy} onClick={() => patch({ status: 'in_consult', claim: true })}>
-                  Start consult
-                </button>
-              )}
-              {d.visit.status === 'in_consult' && (
-                <button disabled={busy} onClick={() => patch({ status: 'done' })}>
-                  Mark done
-                </button>
-              )}
-              <button className="secondary" disabled={busy} onClick={() => patch({ status: 'referred' })}>
-                Refer out
+              <label htmlFor="urg">Urgency override</label>
+              <select id="urg" value={urgency} onChange={(e) => setUrgency(e.target.value)}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <button
+                style={{ marginTop: 8 }}
+                disabled={busy || Number(urgency) === d.visit.urgency}
+                onClick={() => patch({ urgency: Number(urgency) })}
+              >
+                Save urgency
               </button>
+
+              <label htmlFor="notes" style={{ marginTop: 14 }}>
+                Notes
+              </label>
+              <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <button className="secondary" disabled={busy} onClick={() => patch({ doctor_notes: notes })}>
+                Save notes
+              </button>
+
+              <h2>Queue status</h2>
+              <p>
+                <Status value={d.visit.status} />
+                {d.visit.urgency_overridden && <span className="small muted"> · urgency overridden</span>}
+              </p>
+              <div className="row">
+                {!d.visit.doctor_user_id && (
+                  <button disabled={busy} onClick={() => patch({ claim: true })}>
+                    Claim
+                  </button>
+                )}
+                {d.visit.status === 'waiting' && (
+                  <button disabled={busy} onClick={() => patch({ status: 'in_consult', claim: true })}>
+                    Start consult
+                  </button>
+                )}
+                {d.visit.status === 'in_consult' && (
+                  <button disabled={busy} onClick={() => patch({ status: 'done' })}>
+                    Mark done
+                  </button>
+                )}
+                <button className="secondary" disabled={busy} onClick={() => patch({ status: 'referred' })}>
+                  Refer out
+                </button>
+              </div>
             </div>
           </div>
 

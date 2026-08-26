@@ -100,7 +100,7 @@ function Queue() {
             </thead>
             <tbody>
               {data.map((v) => (
-                <tr key={v.id}>
+                <tr key={v.id} className={v.red_flag ? 'row-danger' : undefined}>
                   <td>#{v.token_no}</td>
                   <td>
                     <Urgency value={v.urgency} overridden={v.urgency_overridden} />

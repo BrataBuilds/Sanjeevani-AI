@@ -3,50 +3,89 @@
 import { useEffect, useState } from 'react';
 import { URGENCY_LABEL, fetchBlobUrl } from '../lib/api';
 
+/** Numeral, notch height and word all carry the level — colour is a fourth
+ * channel, never the only one. Same language as the patient app's urgency
+ * scale and the canvas's `urgency()` helper: 1–2 danger, 3 mid, 4–5 neutral. */
+function urgencyColor(level: number) {
+  return level <= 2 ? 'var(--dan)' : level === 3 ? 'var(--mid)' : 'var(--ink2)';
+}
+
 export function Urgency({ value, overridden }: { value?: number | null; overridden?: boolean }) {
   if (!value) return <span className="tag">—</span>;
+  const fg = urgencyColor(value);
+  const filled = 6 - value;
   return (
-    <span className={`tag u${value}`} title={overridden ? 'overridden by a doctor' : 'as triaged'}>
+    <span
+      className={`tag u${value}`}
+      title={overridden ? 'overridden by a doctor' : 'as triaged'}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+    >
+      <span style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1, color: fg }}>{value}</span>
+      <span style={{ display: 'inline-flex', gap: 2, alignItems: 'flex-end' }}>
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 3,
+              height: 4 + i * 2,
+              borderRadius: 1,
+              background: i <= filled ? fg : 'transparent',
+              border: `1px solid ${i <= filled ? fg : 'var(--line)'}`,
+            }}
+          />
+        ))}
+      </span>
       {URGENCY_LABEL[value] ?? value}
       {overridden ? ' ✎' : ''}
     </span>
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  in_consult: 'in consult',
+  waiting: 'waiting',
+  claimed: 'claimed',
+  done: 'done',
+  referred: 'referred',
+  cancelled: 'cancelled',
+};
+
 export function Status({ value }: { value: string }) {
-  return <span className="tag">{value.replace('_', ' ')}</span>;
+  return <span className={`tag st-${value}`}>{STATUS_LABEL[value] ?? value.replace('_', ' ')}</span>;
 }
 
-export function Stat({ n, k }: { n: number | string | null | undefined; k: string }) {
+export function Stat({
+  n,
+  k,
+  tone,
+}: {
+  n: number | string | null | undefined;
+  k: string;
+  tone?: 'danger' | 'warn';
+}) {
   return (
-    <div className="stat">
-      <div className="n">{n ?? '—'}</div>
+    <div className={`stat${tone ? ` tone-${tone}` : ''}`}>
       <div className="k">{k}</div>
+      <div className="n">{n ?? '—'}</div>
     </div>
   );
 }
 
-/** Bar chart without a chart library — a div is wide enough. */
+/** Bar chart without a chart library — a labelled row with a filled track,
+ * same shape as the canvas's dashboard rows. */
 export function Bars({ rows }: { rows: { label: string; value: number; sub?: string }[] }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   if (!rows.length) return <p className="muted small">No data yet.</p>;
   return (
     <div>
       {rows.map((r) => (
-        <div key={r.label} style={{ marginBottom: 6 }}>
-          <div className="small" style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div className="bars-row" key={r.label}>
+          <div className="label-line">
             <span>{r.label}</span>
-            <span className="muted">{r.sub ?? r.value}</span>
+            <span>{r.sub ?? r.value}</span>
           </div>
-          <div style={{ background: '#e6e9ee', borderRadius: 3, height: 8 }}>
-            <div
-              style={{
-                width: `${(r.value / max) * 100}%`,
-                background: 'var(--accent)',
-                height: '100%',
-                borderRadius: 3,
-              }}
-            />
+          <div className="bars-track">
+            <div style={{ width: `${(r.value / max) * 100}%` }} />
           </div>
         </div>
       ))}

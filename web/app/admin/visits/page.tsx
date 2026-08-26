@@ -83,7 +83,7 @@ function Visits() {
             </thead>
             <tbody>
               {data.map((v) => (
-                <tr key={v.id}>
+                <tr key={v.id} className={v.red_flag ? 'row-danger' : v.urgency_overridden ? 'row-diverged' : undefined}>
                   <td className="small">{v.token_date}</td>
                   <td>#{v.token_no}</td>
                   <td>
