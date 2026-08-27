@@ -17,10 +17,10 @@ async def chat(prompt: UserPrompt):
     actual_session_id = UUID(actual_session_id)
     answer = response.content
     db.add_entry(session_id=session_id, role="user", content=prompt.user_query, timestamp=str(prompt.timestamp))
-    assistant_time = str(datetime.now())
-    db.add_entry(session_id, role="assistant", content=answer, timestamp=assistant_time)
+    assistant_time = datetime.now()
+    db.add_entry(session_id, role="assistant", content=answer, timestamp=str(assistant_time))
 
-    return ChatResponse(session_id=actual_session_id, response=response.content, timestamp=str(assistant_time))
+    return ChatResponse(session_id=actual_session_id, response=response.content, timestamp=assistant_time)
 
 @router.get("/chats/{session_id}", response_model = HistoryResponse)
 async def get_chats(session_id : str):
