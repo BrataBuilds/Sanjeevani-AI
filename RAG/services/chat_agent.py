@@ -2,7 +2,7 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 from agno.db.postgres import PostgresDb
 import uuid
-from config import settings
+from config.config import settings
 agent_storage = PostgresDb(
     db_url = settings.db_url,
     session_table = settings.db_table
@@ -15,12 +15,12 @@ INSTRUCTIONS = [
 ]
 
 async def get_agent(session_id: str | None = None) -> tuple[Agent, str]:
-    actual_id = session_id or str(uuid.uuid4())
+    session_id = session_id if session_id != None else str(uuid.uuid4())
     return (Agent(
-        model= Gemini(id = "gemini-3.5-flash-lite", system_prompt= SYSTEM_PROMPT, temperature=0.9, api_key=settings.gemini_api, instructions=INSTRUCTIONS),
-        session_id = actual_id,
+        model= Gemini(id = "gemma-4-31b-it", system_prompt= SYSTEM_PROMPT, temperature=0.9, api_key=settings.gemini_api, instructions=INSTRUCTIONS),
+        session_id = session_id,
         add_history_to_context=True,
         db=agent_storage,
         read_chat_history=True,
         num_history_messages=10
-        ), actual_id)
+        ), session_id)

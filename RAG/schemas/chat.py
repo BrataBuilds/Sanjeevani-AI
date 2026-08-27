@@ -1,20 +1,27 @@
 from pydantic import BaseModel
-from typing import Any
-class ChatMessage(BaseModel):
+from datetime import datetime
+from uuid import UUID
+class UserPrompt(BaseModel):
     """Return the prompt given by the user"""
-    timestamp : str
+    timestamp : datetime
     user_query: str
-    image_data: str | None = None
-    session_id : str | None = None
+    session_id : UUID | None = None
 class ChatResponse(BaseModel):
     """Return the response of the llm"""
-    timestamp : str
-    session_id: str
-    response: str | None
+    timestamp : datetime
+    session_id: UUID
+    response: str | None = None
+    
+class ChatEntry(BaseModel):
+    """Combine the chats of user and agent into one"""
+    chat_id: UUID
+    role: str # Decides whether the chat is from user / assistant
+    timestamp: datetime
+    content: str
 class HistoryResponse(BaseModel):
     """Return list of chats"""
-    session_id : str
-    # Query / Response dicts
-    chats : list[Any]
+    session_id : UUID
+    # Store history as a list of user's prompts and chat response
+    chats : list[ChatEntry]
     
     
