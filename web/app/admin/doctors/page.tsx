@@ -115,25 +115,33 @@ function Staff() {
                 <td className="small">{d.reg_no ?? '—'}</td>
                 <td>{d.queue_today}</td>
                 <td>
-                  <button
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() =>
-                      act(() =>
-                        api(`/admin/doctors/${d.user_id}`, {
-                          method: 'PATCH',
-                          body: { is_available: !d.is_available },
-                        }),
-                      )
-                    }
-                  >
-                    {d.is_available ? 'On duty' : 'Off duty'}
-                  </button>
+                  <span className="switch">
+                    <button
+                      type="button"
+                      className={`switch-btn${d.is_available ? ' on' : ''}`}
+                      disabled={busy}
+                      aria-label={d.is_available ? 'On duty' : 'Off duty'}
+                      onClick={() =>
+                        act(() =>
+                          api(`/admin/doctors/${d.user_id}`, {
+                            method: 'PATCH',
+                            body: { is_available: !d.is_available },
+                          }),
+                        )
+                      }
+                    >
+                      <span className="knob" />
+                    </button>
+                    <span className="small" style={{ color: d.is_available ? 'var(--acc)' : 'var(--ink2)' }}>
+                      {d.is_available ? 'On duty' : 'Off duty'}
+                    </span>
+                  </span>
                 </td>
                 <td>
                   <button
                     className="secondary"
                     disabled={busy}
+                    style={!d.is_active ? { borderColor: 'var(--dan)', color: 'var(--dan)' } : undefined}
                     onClick={() =>
                       act(() =>
                         api(`/admin/doctors/${d.user_id}`, {

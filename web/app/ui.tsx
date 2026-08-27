@@ -93,6 +93,32 @@ export function Bars({ rows }: { rows: { label: string; value: number; sub?: str
   );
 }
 
+/** Segmented filter control — the canvas's recurring scope/status/window picker. */
+export function Pills<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  return (
+    <div className="pillbar">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={o.value === value ? 'active' : undefined}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Files need the auth header, so they arrive as a blob rather than a plain src. */
 export function AuthFile({ path, mime, label }: { path: string; mime: string; label: string }) {
   const [url, setUrl] = useState<string | null>(null);

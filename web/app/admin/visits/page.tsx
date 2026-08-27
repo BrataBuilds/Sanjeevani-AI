@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { api, fmtTime } from '../../../lib/api';
 import { RequireRole, usePolling } from '../../../lib/session';
-import { Status, Urgency } from '../../ui';
+import { Pills, Status, Urgency } from '../../ui';
 
 type Row = {
   id: string;
@@ -32,11 +32,15 @@ export default function AdminVisitsPage() {
 
 function Visits() {
   const [status, setStatus] = useState('');
+  const [divFilter, setDivFilter] = useState<'all' | 'agreed' | 'diverged'>('all');
   const load = useCallback(
     () => api<Row[]>(`/admin/visits${status ? `?status=${status}` : ''}`),
     [status],
   );
   const { data, error, pending, refresh } = usePolling(load, 30000);
+  const rows = data?.filter((v) =>
+    divFilter === 'all' ? true : divFilter === 'diverged' ? v.urgency_overridden : !v.urgency_overridden,
+  );
 
   return (
     <>
@@ -46,7 +50,7 @@ function Visits() {
         doctor overrode the triage suggestion.
       </p>
 
-      <div className="panel row">
+      <div className="row" style={{ marginBottom: 14, alignItems: 'center' }}>
         <div>
           <label htmlFor="status">Status</label>
           <select id="status" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -58,6 +62,15 @@ function Visits() {
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
+        <Pills
+          value={divFilter}
+          onChange={setDivFilter}
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'agreed', label: 'AI accepted' },
+            { value: 'diverged', label: 'Overridden' },
+          ]}
+        />
         <button className="secondary" onClick={refresh}>
           Refresh
         </button>
@@ -65,7 +78,7 @@ function Visits() {
 
       {error && <p className="error">{error}</p>}
       {pending && !data && <p className="muted">Loading…</p>}
-      {data && (
+      {rows && (
         <div className="table-scroll">
           <table>
             <thead>
@@ -82,7 +95,7 @@ function Visits() {
               </tr>
             </thead>
             <tbody>
-              {data.map((v) => (
+              {rows.map((v) => (
                 <tr key={v.id} className={v.red_flag ? 'row-danger' : v.urgency_overridden ? 'row-diverged' : undefined}>
                   <td className="small">{v.token_date}</td>
                   <td>#{v.token_no}</td>

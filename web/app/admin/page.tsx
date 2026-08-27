@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import { api } from '../../lib/api';
 import { RequireRole, usePolling } from '../../lib/session';
-import { Bars, Stat, Urgency } from '../ui';
+import { Bars, Pills, Stat, Urgency } from '../ui';
 
 type Overview = {
   window_days: number;
@@ -26,7 +26,7 @@ export default function AdminPage() {
 }
 
 function Overview() {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState('7');
   const load = useCallback(() => api<Overview>(`/admin/overview?days=${days}`), [days]);
   const { data, error, pending } = usePolling(load, 30000);
 
@@ -48,16 +48,16 @@ function Overview() {
         <Stat n={data.totals.all_time} k="Visits all time" />
       </div>
 
-      <div className="panel row">
-        <div>
-          <label htmlFor="days">Window</label>
-          <select id="days" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 14 days</option>
-            <option value={30}>Last 30 days</option>
-          </select>
-        </div>
-      </div>
+      <Pills
+        value={days}
+        onChange={setDays}
+        options={[
+          { value: '7', label: 'Last 7 days' },
+          { value: '14', label: 'Last 14 days' },
+          { value: '30', label: 'Last 30 days' },
+        ]}
+      />
+      <div style={{ marginBottom: 14 }} />
 
       <div className="cols2">
         <div className="panel">

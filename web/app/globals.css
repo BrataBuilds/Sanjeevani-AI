@@ -6,22 +6,22 @@
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --canvas: #e9ecec;
-  --bg: #f4f6f6;
-  --surface: #ffffff;
-  --surface2: #eceff0;
-  --ink: #13181a;
-  --ink2: #576063;
-  --ink3: #899296;
-  --line: #e2e7e7;
-  --acc: #357574;
-  --accSoft: #e2f5f4;
+  --canvas: #faf0d9;
+  --bg: #fdf6e6;
+  --surface: #fffcf4;
+  --surface2: #f6edd8;
+  --ink: #1a3126;
+  --ink2: #4c6056;
+  --ink3: #63756c;
+  --line: #dbe1cb;
+  --acc: #31785e;
+  --accSoft: #d1f9e6;
   --accInk: #ffffff;
-  --dan: #b63132;
-  --danSoft: #ffe7e3;
-  --mid: #a06f30;
-  --midSoft: #ffefdd;
-  --stub: #8f9699;
+  --dan: #b5242a;
+  --danSoft: #ffe4e1;
+  --mid: #906106;
+  --midSoft: #ffedd6;
+  --stub: #73756c;
 
   --serif: 'Instrument Serif', Georgia, serif;
   --sans: Figtree, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -36,22 +36,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #0a0d0d;
-    --bg: #0f1213;
-    --surface: #171b1c;
-    --surface2: #1f2425;
-    --ink: #eef1f1;
-    --ink2: #a2acaf;
-    --ink3: #737d80;
-    --line: #292f30;
-    --acc: #70c1c1;
-    --accSoft: #053838;
-    --accInk: #0a0d0d;
-    --dan: #f47b74;
-    --danSoft: #4e201e;
-    --mid: #e1ac6e;
-    --midSoft: #432a08;
-    --stub: #6c7679;
+    --canvas: #102119;
+    --bg: #182b22;
+    --surface: #22372d;
+    --surface2: #2e4439;
+    --ink: #faf3e3;
+    --ink2: #b8beaa;
+    --ink3: #93a495;
+    --line: #3c5348;
+    --acc: #87e0b7;
+    --accSoft: #224a39;
+    --accInk: #102119;
+    --dan: #f87e77;
+    --danSoft: #592624;
+    --mid: #e3b86e;
+    --midSoft: #4a3716;
+    --stub: #8b938c;
   }
 }
 
@@ -294,6 +294,44 @@ button:disabled { opacity: .55; cursor: default; filter: none; }
   padding: 12px 14px;
   font-size: 13px;
 }
+
+/* ------------------------------------------------------------- pills */
+
+.pillbar { display: inline-flex; gap: 4px; padding: 3px; background: var(--surface2); border-radius: 11px; }
+.pillbar button {
+  padding: 7px 13px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  min-height: 32px;
+  background: transparent;
+  color: var(--ink2);
+}
+.pillbar button:hover { filter: none; background: var(--line); }
+.pillbar button.active { background: var(--surface); color: var(--ink); font-weight: 600; }
+
+/* ------------------------------------------------------------ banners */
+
+.banner { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 14px; font-size: 13px; margin-bottom: 12px; }
+.banner-attn { background: var(--danSoft); border: 1.5px solid var(--dan); color: var(--dan); font-weight: 600; }
+.banner-ok { background: var(--accSoft); color: var(--acc); font-weight: 500; }
+.banner .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.banner .spacer { flex: 1; }
+
+/* --------------------------------------------------------------- switch */
+
+.switch { display: inline-flex; align-items: center; gap: 8px; }
+.switch-btn {
+  width: 42px; height: 24px; border-radius: 12px; padding: 3px;
+  background: var(--line); border: none; display: inline-flex; align-items: center; min-height: 0; vertical-align: middle;
+}
+.switch-btn.on { background: var(--acc); }
+.switch-btn .knob {
+  width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform 120ms ease;
+}
+.switch-btn.on .knob { transform: translateX(18px); }
 
 /* -------------------------------------------------------------- login */
 

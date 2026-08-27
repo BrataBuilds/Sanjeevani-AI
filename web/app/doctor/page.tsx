@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { api, fmtTime, waitedMinutes } from '../../lib/api';
 import { RequireRole, usePolling } from '../../lib/session';
-import { Status, Urgency } from '../ui';
+import { Pills, Status, Urgency } from '../ui';
 
 type QueueRow = {
   id: string;
@@ -46,6 +46,8 @@ function Queue() {
   );
   const { data, error, pending, refresh } = usePolling(load, 15000);
 
+  const flagged = data?.find((v) => v.red_flag && v.status !== 'done' && v.status !== 'cancelled');
+
   return (
     <>
       <h1>Queue</h1>
@@ -53,25 +55,27 @@ function Queue() {
         Most urgent first, then longest waiting. Refreshes every 15 seconds.
       </p>
 
-      <div className="panel row">
-        <div>
-          <label htmlFor="scope">Scope</label>
-          <select id="scope" value={scope} onChange={(e) => setScope(e.target.value as any)}>
-            <option value="mine">Assigned to me</option>
-            <option value="department">My department</option>
-            <option value="hospital">Whole hospital</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="status">Status</label>
-          <select id="status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All (today)</option>
-            <option value="waiting">Waiting</option>
-            <option value="in_consult">In consult</option>
-            <option value="done">Done</option>
-            <option value="referred">Referred</option>
-          </select>
-        </div>
+      <div className="row" style={{ marginBottom: 14, alignItems: 'center' }}>
+        <Pills
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'mine', label: 'Assigned to me' },
+            { value: 'department', label: 'My department' },
+            { value: 'hospital', label: 'Whole hospital' },
+          ]}
+        />
+        <Pills
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: '', label: 'All (today)' },
+            { value: 'waiting', label: 'Waiting' },
+            { value: 'in_consult', label: 'In consult' },
+            { value: 'done', label: 'Done' },
+            { value: 'referred', label: 'Referred' },
+          ]}
+        />
         <button className="secondary" onClick={refresh}>
           Refresh
         </button>
@@ -79,6 +83,21 @@ function Queue() {
 
       {error && <p className="error">{error}</p>}
       {pending && !data && <p className="muted">Loading…</p>}
+
+      {flagged && (
+        <div className="banner banner-attn">
+          <span className="dot" />
+          <span>Red flag waiting: {flagged.patient_name}, #{flagged.token_no}.</span>
+          <span className="spacer" />
+          <Link href={`/doctor/visits/${flagged.id}`}>Open</Link>
+        </div>
+      )}
+      {!flagged && data && data.length > 0 && (
+        <div className="banner banner-ok">
+          <span className="dot" />
+          <span>No red flags waiting. Nothing needs you this minute.</span>
+        </div>
+      )}
 
       {data && data.length === 0 && <p className="muted">Nothing in this queue right now.</p>}
 
