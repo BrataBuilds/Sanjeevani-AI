@@ -60,3 +60,13 @@ scripts/visit.txt
 /appfeature.md
 /Design_doc.md
 *.env
+
+# Private keys. Nothing here needs a Firebase/Google service account -- token
+# verification uses public certificates -- so if one of these ever appears it is
+# almost certainly a mistake, and it must not be committed.
+*serviceAccount*.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+google-services.json
+GoogleService-Info.plist
+secrets/

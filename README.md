@@ -55,8 +55,20 @@ Right now AI is only capable of making amateur level diagnosis, but falls apart 
 
 ## Run it
 
+Everything, in one command:
+
 ```bash
-cp .env.example .env
+bash run.sh
+```
+
+Postgres, the API, the staff console on :3000, and the patient app as Flutter web on
+:8081. Add `--profile ai` for the triage service. A Flutter app needs a device or
+emulator, so the mobile build stays outside Docker.
+
+Or piece by piece, for development:
+
+```bash
+cp .env.example .env                         # then set JWT_SECRET -- it has no default
 
 docker compose up -d db                      # Postgres on host port 5433, schema + seed applied
 cd backend && npm install && npm run dev     # API on :4000
@@ -64,13 +76,13 @@ cd web     && npm install && npm run dev     # console on :3000
 cd app     && flutter run                    # or: flutter run -d chrome
 ```
 
-Or `docker compose up` for db + API + console together.
-
 First time on this machine, or putting the app on a physical phone?
 **[SETUP.md](SETUP.md)** has the full walkthrough — prerequisites, device setup,
 verification, and troubleshooting.
 
-Seeded accounts, all with password `password123`:
+Demo accounts are **off by default** (`SEED_DEMO_DATA=false`): they share one
+password published in this repository. Set `SEED_DEMO_DATA=true` in `.env`
+before the first boot to get them, all with password `password123`:
 
 | Role | Email |
 |---|---|
@@ -78,7 +90,13 @@ Seeded accounts, all with password `password123`:
 | Doctor | `dr.mehta@citygeneral.test` |
 | Hospital admin | `admin@citygeneral.test` |
 
-Doctors and admins cannot self-register — a hospital admin creates them from the console.
+Without the demo data you get an empty instance. Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+and `ADMIN_HOSPITAL` in `.env` and the backend provisions that administrator on
+boot — the one account the system cannot create for itself.
+
+Doctors and admins cannot self-register — a hospital admin creates them from the
+console. With Firebase or Google sign-in configured, a doctor needs no password:
+authorising the address is what lets them in.
 
 ## The AI seam
 

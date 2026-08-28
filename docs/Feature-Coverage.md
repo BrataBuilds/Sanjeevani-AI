@@ -121,6 +121,11 @@ was built. Each is cheap to change now and expensive later.
 urgent** (`Fever 98F mild = 10`, `Fever 105F = 100`). `Design docs/Design_doc.md` §5
 says "urgency tier", and the ESI framework it cites is **1–5 where 1 is most urgent**.
 
+**Resolved in one place, for now.** The RAG service emits 0–100 and the platform
+stores 1–5; `to_esi()` in `RAG/api/routes/triage.py` converts between them, and that
+is the only conversion in either codebase. The band edges there are a placeholder,
+so the underlying question — which scale is authoritative — is still open.
+
 **Built: 1–5, 1 most urgent.** It is the standard triage scale, it maps directly to five
 queue colours, and ESI is what the design doc names. But if the AI team is scoring 0–100,
 that is a real mismatch — `triage_results.urgency` has a `CHECK (urgency between 1 and 5)`

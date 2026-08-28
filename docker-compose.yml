@@ -9,7 +9,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-sanjeevani}
       # false on anything holding real patients -- the demo staff accounts share
       # one well-known password
-      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
     ports:
       # host 5433 so a local postgres on 5432 keeps working
       - "${POSTGRES_PORT:-5433}:5432"
@@ -39,12 +39,65 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-sanjeevani}:${POSTGRES_PASSWORD:-sanjeevani}@db:5432/${POSTGRES_DB:-sanjeevani}
       JWT_SECRET: ${JWT_SECRET:-}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      # Unset -> the backend answers from its labelled stub. `bash run.sh --profile ai`
+      # points this at the rag service; setting it while rag is down means patients
+      # get an "assistant unavailable" message instead of stub answers, which is why
+      # it is not hardcoded here.
       AI_SERVICE_URL: ${AI_SERVICE_URL:-}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
       AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # The first hospital administrator, reconciled on every boot. See .env.example.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_HOSPITAL: ${ADMIN_HOSPITAL:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:8081}
     ports:
       - "${API_PORT:-4000}:4000"
+
+  # Patient app as Flutter web. The mobile build needs a device or emulator, so
+  # this is as far as Docker goes: every screen, in a browser.
+  app-web:
+    build:
+      context: ./app
+      args:
+        API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+        GOOGLE_SERVER_CLIENT_ID: ${GOOGLE_SERVER_CLIENT_ID:-}
+        FIREBASE_API_KEY: ${FIREBASE_API_KEY:-}
+        FIREBASE_APP_ID: ${FIREBASE_APP_ID:-}
+        FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+        FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID:-}
+        FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN:-}
+    container_name: sanjeevani-app
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_WEB_PORT:-8081}:80"
+
+  # The AI team's triage service. Off by default: `docker compose --profile ai up`.
+  # It needs a Gemini key, and the seam works without it -- with AI_SERVICE_URL
+  # unset the backend answers from its labelled stub.
+  rag:
+    build: ./RAG
+    container_name: sanjeevani-rag
+    profiles: ["ai"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Unset -> pydantic-settings refuses to start and says which field is missing.
+      GEMINI_API: ${GEMINI_API:-}
+      # The same dockerized Postgres the platform uses. RAG creates its own tables
+      # (sessions, session_state, symptoms, doctors) at startup via knowledge.initialize().
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemma-4-31b-it}
+      DB_URL: postgresql+psycopg://${POSTGRES_USER:-sanjeevani}:${POSTGRES_PASSWORD:-sanjeevani}@db:5432/${POSTGRES_DB:-sanjeevani}
+      PUBLIC_API_URL: http://backend:4000
+      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
+    ports:
+      - "${RAG_PORT:-8000}:8000"
 
   web:
     build: ./web

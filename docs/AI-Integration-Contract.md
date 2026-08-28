@@ -190,7 +190,28 @@ Everything except `request_id` is optional. `normaliseTriage()` in
 `backend/src/lib/ai.js` drops wrong-typed fields rather than rejecting the whole
 response, so a missing nice-to-have never loses a triage.
 
-### Open point: the urgency scale
+### The urgency scale, as currently resolved
+
+The RAG service in `RAG/` scores **0-100, higher being more urgent**
+(`schemas/triage.py`, `PreliminaryReport.urgency_score`). The platform stores
+**ESI 1-5, 1 most urgent**, with a `CHECK` constraint. Both are still true, so the
+two scales meet in exactly one place: `URGENCY_BANDS` and `to_esi()` in
+`RAG/api/routes/triage.py`.
+
+| 0-100 score | ESI sent to the platform |
+|---|---|
+| 80 and above | 1 - immediate |
+| 60-79 | 2 - very urgent |
+| 40-59 | 3 - urgent |
+| 20-39 | 4 - standard |
+| below 20 | 5 - non-urgent |
+
+Those band edges are a placeholder, not a clinical calibration. Move them in that
+one constant; do not scatter conversions through either codebase. Settling the
+scale properly is still open question 1 in
+[Feature Coverage](Feature-Coverage).
+
+### Original note on the disagreement
 
 The contract above says **1–5, 1 most urgent**, matching the ESI framework
 `Design docs/Design_doc.md` §5 cites, and `triage_results.urgency` has a

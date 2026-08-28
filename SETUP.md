@@ -206,23 +206,57 @@ network: `--dart-define=API_URL=http://192.168.1.20:4000`.
 
 ---
 
-## 7. Everything at once
+## 7. Everything at once — one command
 
 ```bash
-docker compose up            # db + backend + web
-cd app && flutter run        # the app always runs from your machine
+bash run.sh
 ```
 
-Compose reads `.env` from the repository root automatically. Rebuild rather than restart
-after changing `NEXT_PUBLIC_API_URL`:
+That is the whole thing: Postgres, the API, the staff console, and the patient app as
+Flutter web. It creates `.env` from the template on a first run and generates the
+secrets that have no default, then does `docker compose up --build`.
+
+| | |
+|---|---|
+| Staff console | <http://localhost:3000> |
+| Patient app (web) | <http://localhost:8081> |
+| API | <http://localhost:4000> |
+| Postgres | host port 5433 |
+
+Add the AI team's triage service:
 
 ```bash
-docker compose up --build web
+bash run.sh --profile ai      # also starts RAG on :8000, needs GEMINI_API in .env
+```
+
+Any extra arguments go straight through to `docker compose up`, so `bash run.sh -d`
+detaches.
+
+**The mobile app is not in here.** A Flutter app needs a device or an emulator, so
+`:8081` is the browser build — every screen, but not the real thing. For a phone or
+emulator, sections 3–6 above.
+
+Plain `docker compose up` also works if you already have a `.env` with a real
+`JWT_SECRET`; `run.sh` exists only because that value has no default and the backend
+refuses to start without it. Rebuild rather than restart after changing
+`NEXT_PUBLIC_API_URL` or `API_URL` — both are compiled into their browser bundles:
+
+```bash
+docker compose up --build web app-web
 ```
 
 ---
 
 ## 8. Seeded accounts
+
+> **Off by default.** Every account below shares one password published in this
+> repository, so loading them anywhere reachable hands out a hospital-admin
+> session to anyone who reads the file. Set `SEED_DEMO_DATA=true` in `.env`
+> **before the first boot** (they only load into an empty database) to use them.
+>
+> For anything else, set `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_HOSPITAL`
+> instead: the backend provisions that administrator on every start, and that
+> admin creates the doctors.
 
 All use the password `password123`.
 
@@ -292,19 +326,42 @@ The staff console has no Google button on purpose.
 
 ---
 
-## 11. Connecting a real AI service
+## 11. The AI triage service
 
-Not required, and not this repository's job. When the triage team has something running:
+Optional. Everything works without it — the backend answers from a labelled stub, so
+the app and both dashboards demo fine with no Gemini key at all.
+
+To run it, put a Gemini key in `.env` and start the `ai` profile:
 
 ```bash
-AI_SERVICE_URL=http://localhost:9000
-AI_CALLBACK_SECRET=<shared secret>
-PUBLIC_API_URL=http://localhost:4000
+GEMINI_API=<your key>
 ```
 
-Restart the backend and confirm `GET /ai/health` reports `"triage_backend":"http"`.
-The request and response shapes, the three ways to plug in, and how to test against a
-real service are all in [AI Integration Contract](https://github.com/BrataBuilds/SIH2026-Smart-Health-App/wiki/AI-Integration-Contract).
+```bash
+bash run.sh --profile ai
+```
+
+That starts `RAG/` on :8000 and points `AI_SERVICE_URL` at it. Confirm with:
+
+```bash
+curl localhost:4000/ai/health     # {"triage_backend":"http", ...}
+curl localhost:8000/              # lists the RAG endpoints
+```
+
+`run.sh` sets `AI_SERVICE_URL` only for this profile, on purpose: pointing the backend
+at a service that is not running turns stub answers into "the assistant is
+unavailable".
+
+**It shares this Postgres.** `DB_URL` points at the same container, and the service
+creates its own tables on startup — `sessions`, `session_state`, `symptoms`, `doctors`
+— alongside the platform's 17. Reports are stored in `session_state.report`, not on
+the container filesystem, so they survive a restart.
+
+The endpoint the backend calls is `POST /triage` in `RAG/api/routes/triage.py`. It is a
+translator only: it hands the newest patient message to the agent and maps the answer
+onto the platform's contract, including converting the service's 0–100 urgency score to
+the platform's ESI 1–5. Request and response shapes are in
+[AI Integration Contract](https://github.com/BrataBuilds/SIH2026-Smart-Health-App/wiki/AI-Integration-Contract).
 
 ---
 

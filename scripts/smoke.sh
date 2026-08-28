@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # End-to-end check against a running stack. Exercises the whole patient journey
-# (register -> profile -> upload -> triage chat -> token) plus the doctor and
+# (register -> profile -> upload -> triage chat -> doctor decision -> token) plus the doctor and
 # admin dashboards and the AI seam, then asserts the access-control boundaries.
 #
 #   docker compose up -d db && (cd backend && npm run dev)
 #   bash scripts/smoke.sh
+#
+# Needs the demo dataset: it logs in as the seeded dr.mehta and admin accounts.
+# That is off by default now (SEED_DEMO_DATA=false), so a production-shaped boot
+# has no such accounts and this script will not run against one -- by design.
 #
 # Needs curl and python3 on PATH. Writes scratch files next to itself.
 set -u
@@ -13,7 +17,8 @@ API="${API:-http://localhost:4000}"
 # Falls back to ../.env so this matches whatever the running backend loaded.
 # No default: the secret is per-deployment now, and asserting against a guessed
 # one would just fail confusingly.
-SECRET="${AI_CALLBACK_SECRET:-$(sed -n 's/^AI_CALLBACK_SECRET=//p' ../.env 2>/dev/null | tr -d '')}"
+SECRET="${AI_CALLBACK_SECRET:-$(sed -n 's/^AI_CALLBACK_SECRET=//p' ../.env 2>/dev/null | tr -d '
+')}"
 J='content-type: application/json'
 fail=0
 chk() { if [ "$1" = "$2" ]; then echo "  ok  $3"; else echo "  FAIL $3 (want $1 got $2)"; fail=1; fi; }
@@ -66,10 +71,13 @@ c=$(code -X POST "$API/me/conditions" -H "$J" -H "$A" -d '{"kind":"allergy","lab
 c=$(code -X POST "$API/me/conditions" -H "$J" -H "$A" -d '{"kind":"nope","label":"x"}'); chk 400 "$c" "bad condition kind"
 c=$(code -X POST "$API/me/relatives" -H "$J" -H "$A" -d '{"name":"Guardian One","contact":"+91-9000099999","relation":"guardian"}'); chk 201 "$c" "add relative"
 
-echo "== aadhaar mock =="
-c=$(code -X POST "$API/me/aadhaar/verify" -H "$J" -H "$A" -d '{"aadhaar_number":"1234 5678 9012"}'); chk 200 "$c" "aadhaar mock"
+echo "== aadhaar is recorded, never claimed verified =="
+c=$(code -X POST "$API/me/aadhaar/verify" -H "$J" -H "$A" -d '{"aadhaar_number":"1234 5678 9012"}'); chk 200 "$c" "aadhaar recorded"
 python -c "
-import json;d=json.load(open('./body'));assert d['aadhaar_last4']=='9012' and d['mock'] is True;print('  ok  last4 stored, flagged mock')"
+import json;d=json.load(open('./body'))
+assert d['aadhaar_last4']=='9012'
+assert d['aadhaar_verified'] is False, 'must not claim a verification that never happened'
+print('  ok  last4 stored, not marked verified')"
 c=$(code -X POST "$API/me/aadhaar/verify" -H "$J" -H "$A" -d '{"aadhaar_number":"123"}'); chk 400 "$c" "short aadhaar"
 
 echo "== document upload (image into postgres) =="
@@ -98,41 +106,131 @@ echo "== ai conversation =="
 c=$(code -X POST "$API/conversations" -H "$J" -H "$A" -d '{"kind":"ai"}'); chk 201 "$c" "create ai thread"
 CONV=$(python -c "import json;print(json.load(open('./body'))['id'])")
 
+echo "== the thread opens with a registration intake, asked one at a time =="
+python -c "
+import json,urllib.request
+
+TOK='$TOK'
+BASE='$API/conversations/$CONV'
+
+def get():
+    r=urllib.request.Request(BASE+'/messages',headers={'authorization':'Bearer '+TOK})
+    return json.load(urllib.request.urlopen(r))
+
+def post(path,body):
+    r=urllib.request.Request(BASE+path,method='POST',
+        headers={'authorization':'Bearer '+TOK,'content-type':'application/json'},
+        data=json.dumps(body).encode())
+    return json.load(urllib.request.urlopen(r))
+
+asked=[]
+for _ in range(10):
+    d=get()
+    open_intake=[m for m in d['messages']
+                 if m['kind']=='mcq' and m['payload'].get('intake') and m['id'] not in asked]
+    if not open_intake: break
+    m=open_intake[0]
+    qs=m['payload']['questions']
+    assert len(qs)==1, 'intake must be asked one question at a time, got %d' % len(qs)
+    assert m['body']==qs[0]['question'], 'the card header should be the question itself'
+    asked.append(m['id'])
+    out=post('/mcq-answer',{'message_id':m['id'],'answers':{qs[0]['id']:qs[0]['options'][0]}})
+    assert out['triage_pending'] is False, 'intake alone must not fire a triage round'
+else:
+    raise SystemExit('  FAIL intake never finished')
+
+assert len(asked)>=4, 'expected the full intake, got %d question(s)' % len(asked)
+print('  ok  intake asked %d questions, one at a time, none triggering triage' % len(asked))
+
+# Answering is recorded, but never echoed back as a second question message.
+d=get()
+kinds=[m['kind'] for m in d['messages']]
+assert kinds.count('mcq_answer')==len(asked), kinds
+assert d['messages'][-1]['kind']=='text', 'intake should end by handing over to the patient'
+print('  ok  handed over: %s' % d['messages'][-1]['body'][:60])
+" || fail=1
+
 c=$(code -X POST "$API/conversations/$CONV/messages" -H "$J" -H "$A" -d '{"body":"my stomach hurts since morning and I feel dizzy","language":"hi"}')
 chk 201 "$c" "send first message"
 python -c "
 import json,time,urllib.request
-for _ in range(40):
-    time.sleep(0.2)
+# A real triage turn is seconds, not milliseconds -- poll patiently or this is
+# flaky against the ai profile while passing against the stub.
+for _ in range(90):
+    time.sleep(2)
     r=urllib.request.Request('$API/conversations/$CONV/messages',headers={'authorization':'Bearer $TOK'})
     d=json.load(urllib.request.urlopen(r))
-    kinds=[m['kind'] for m in d['messages']]
-    if 'mcq' in kinds: break
+    asked=[m for m in d['messages'] if m['kind']=='mcq' and not m['payload'].get('intake')]
+    if asked and not d['triage_pending']: break
 else:
-    raise SystemExit('  FAIL no mcq message appeared: %s' % kinds)
-mcq=[m for m in d['messages'] if m['kind']=='mcq'][0]
+    raise SystemExit('  FAIL no assistant mcq appeared: %s' % [m['kind'] for m in d['messages']])
+mcq=asked[0]
 qs=mcq['payload']['questions']
-print('  ok  mcq arrived with', len(qs), 'questions')
-open('./mcq.json','w').write(json.dumps({'message_id':mcq['id'],'answers':{qs[0]['id']:qs[0]['options'][1],qs[1]['id']:qs[1]['options'][0]}}))
+print('  ok  assistant mcq arrived with', len(qs), 'questions')
+answers={q['id']: (q['options'][1] if len(q['options'])>1 else q['options'][0]) for q in qs[:2]}
+open('./mcq.json','w').write(json.dumps({'message_id':mcq['id'],'answers':answers}))
 " || fail=1
 
-echo "== answer mcq -> report + token =="
-c=$(code -X POST "$API/conversations/$CONV/mcq-answer" -H "$J" -H "$A" -d @./mcq.json); chk 201 "$c" "submit mcq answers"
+echo "== the assistant interviews before concluding, then routes without ticketing =="
 python -c "
 import json,time,urllib.request
-for _ in range(40):
-    time.sleep(0.2)
-    r=urllib.request.Request('$API/conversations/$CONV/messages',headers={'authorization':'Bearer $TOK'})
-    d=json.load(urllib.request.urlopen(r))
+
+TOK='$TOK'
+BASE='$API/conversations/$CONV'
+
+def get():
+    r=urllib.request.Request(BASE+'/messages',headers={'authorization':'Bearer '+TOK})
+    return json.load(urllib.request.urlopen(r))
+
+def post(path,body):
+    r=urllib.request.Request(BASE+path,method='POST',
+        headers={'authorization':'Bearer '+TOK,'content-type':'application/json'},
+        data=json.dumps(body).encode())
+    return json.load(urllib.request.urlopen(r))
+
+def settle(since=0):
+    # triage is fired after the response is sent, so triage_pending is briefly
+    # still false right after posting. Wait for the transcript to actually grow.
+    for _ in range(90):
+        time.sleep(2)
+        d=get()
+        if len(d['messages'])>since and not d['triage_pending']: return d
+    return d
+
+# A single alarming sentence used to be enough to end the interview. Now the
+# assistant has a floor to clear, so drive it round by round.
+answered=set()
+rounds=0
+d=settle()
+for _ in range(9):
     kinds=[m['kind'] for m in d['messages']]
     if 'report' in kinds and 'status' in kinds: break
+    asked=[m for m in d['messages']
+           if m['kind']=='mcq' and not m['payload'].get('intake') and m['id'] not in answered]
+    if not asked:
+        raise SystemExit('  FAIL assistant stopped without asking or concluding: %s' % kinds)
+    m=asked[-1]; answered.add(m['id']); rounds+=1
+    qs=m['payload']['questions']
+    n=len(d['messages'])
+    post('/mcq-answer',{'message_id':m['id'],
+                        'answers':{q['id']:q['options'][0] for q in qs}})
+    d=settle(since=n)
 else:
+    raise SystemExit('  FAIL assistant never produced a report')
+
+kinds=[m['kind'] for m in d['messages']]
+if 'report' not in kinds or 'status' not in kinds:
     raise SystemExit('  FAIL expected report+status, got %s' % kinds)
+assert rounds >= 2, 'assistant concluded after only %d follow-up round(s)' % rounds
+print('  ok  interviewed over %d follow-up round(s) before concluding' % rounds)
+
 rep=[m for m in d['messages'] if m['kind']=='report'][0]['payload']
 st=[m for m in d['messages'] if m['kind']=='status'][-1]['payload']
 hs=[m for m in d['messages'] if m['kind']=='hospital_suggestion']
 print('  ok  report specialty=%s urgency=%s red_flag=%s' % (rep['specialty'],rep['urgency'],rep['red_flag']))
-print('  ok  token #%s dept=%s doctor=%s' % (st['token_no'],st['department'],st['doctor']))
+assert st['token_no'] is None, 'triage must not issue a token: %r' % st['token_no']
+assert st['state']=='pending_review', st['state']
+print('  ok  routed to dept=%s doctor=%s, no token yet (state=%s)' % (st['department'],st['doctor'],st['state']))
 print('  ok  hospital suggestions:', len(hs[0]['payload']['hospitals']) if hs else 0)
 open('./visit.txt','w').write(st['visit_id'])
 " || fail=1
@@ -170,7 +268,7 @@ c=$(code "$API/conversations/$CONV/messages?limit=-5" -H "$A"); chk 200 "$c" "cl
 
 echo "== patient sees own visit =="
 c=$(code "$API/me/visits" -H "$A"); chk 200 "$c" "GET /me/visits"
-python -c "import json;d=json.load(open('./body'));assert len(d)>=1;print('  ok  visits:',len(d),'token',d[0]['token_no'])"
+python -c "import json;d=json.load(open('./body'));assert len(d)>=1;assert d[0]['token_no'] is None;print('  ok  visits:',len(d),'awaiting a doctor, token',d[0]['token_no'])"
 c=$(code "$API/me/bills" -H "$A"); chk 200 "$c" "GET /me/bills"
 python -c "import json;d=json.load(open('./body'));assert d['billing_enabled'] is False;print('  ok  bills stub, visits in ledger:',len(d['visits']))"
 
@@ -188,7 +286,8 @@ print('  ok  queue rows:',len(d))
 assert len(d)>=1
 v=[x for x in d if x['patient_name']=='Smoke Patient']
 assert v, 'smoke patient not in queue'
-print('  ok  smoke patient in queue: token',v[0]['token_no'],'urgency',v[0]['urgency'],'specialty',v[0]['specialty'])
+assert v[0]['status']=='pending_review', v[0]['status']
+print('  ok  smoke patient awaiting decision: urgency',v[0]['urgency'],'specialty',v[0]['specialty'])
 open('./visit.txt','w').write(v[0]['id'])"
 VISIT=$(cat ./visit.txt)
 c=$(code "$API/doctor/visits/$VISIT" -H "$DA"); chk 200 "$c" "visit detail"
@@ -199,6 +298,19 @@ assert len(d['documents'])>=1
 assert len(d['relatives'])>=1
 assert d['ai_conversation_id']
 print('  ok  detail has triage, %d docs, %d relatives, ai thread' % (len(d['documents']),len(d['relatives'])))"
+echo "== the doctor's decision is what issues the token =="
+c=$(code -X POST "$API/doctor/visits/$VISIT/decision" -H "$J" -H "$DA" -d '{"decision":"admit","note":"come in today"}')
+chk 200 "$c" "admit issues a token"
+python -c "
+import json;d=json.load(open('./body'))
+assert d['token_no'] is not None, 'admit must issue a token'
+assert d['status']=='waiting' and d['admitted_at']
+print('  ok  token #%s issued on admit' % d['token_no'])"
+c=$(code -X POST "$API/doctor/visits/$VISIT/decision" -H "$J" -H "$DA" -d '{"decision":"chat"}')
+chk 400 "$c" "cannot decide a ticketed visit twice"
+c=$(code -X POST "$API/doctor/visits/$VISIT/decision" -H "$J" -H "$DA" -d '{"decision":"maybe"}')
+chk 400 "$c" "rejects an unknown decision"
+
 c=$(code -X PATCH "$API/doctor/visits/$VISIT" -H "$J" -H "$DA" -d '{"urgency":1,"status":"in_consult","doctor_notes":"seen, escalating","claim":true}')
 chk 200 "$c" "urgency override"
 python -c "import json;d=json.load(open('./body'));assert d['urgency']==1 and d['urgency_overridden'] and d['status']=='in_consult';print('  ok  override recorded, flag set')"
@@ -237,8 +349,10 @@ c=$(code "$API/admin/departments" -H "$AD"); chk 200 "$c" "admin departments"
 SPEC="ENT / Slug$(date +%s)"
 c=$(code -X POST "$API/admin/departments" -H "$J" -H "$AD" -d "{\"name\":\"ENT\",\"specialty\":\"$SPEC\"}"); chk 201 "$c" "create department"
 python -c "import json,re;d=json.load(open('./body'));assert re.fullmatch(r'ent_slug[0-9]+',d['specialty']),d;print('  ok  specialty slugified:',d['specialty'])"
-c=$(code -X POST "$API/admin/departments" -H "$J" -H "$AD" -d "{\"name\":\"ENT dup\",\"specialty\":\"$SPEC\"}"); chk 400 "$c" "duplicate specialty rejected"
+# Read the id here, off the 201 -- the duplicate check below leaves a 400 error
+# body behind, which has no id in it.
 DEPT=$(python -c "import json;print(json.load(open('./body'))['id'])")
+c=$(code -X POST "$API/admin/departments" -H "$J" -H "$AD" -d "{\"name\":\"ENT dup\",\"specialty\":\"$SPEC\"}"); chk 400 "$c" "duplicate specialty rejected"
 c=$(code -X POST "$API/admin/doctors" -H "$J" -H "$AD" -d "{\"email\":\"dr.new$(date +%s)@citygeneral.test\",\"full_name\":\"Dr. New Hire\",\"password\":\"password123\",\"department_id\":\"$DEPT\"}")
 chk 201 "$c" "create doctor"
 NEWDOC=$(python -c "import json;print(json.load(open('./body'))['id'])")
@@ -252,7 +366,7 @@ for want in ('triage.result_applied','visit.updated','admin.doctor_created'):
 # The trail is scoped to the caller's hospital. This run registered a patient and
 # saved their profile; those belong to no hospital and must not appear here, or
 # the scope filter is off and one hospital's admin is reading the whole platform.
-leaked = acts & {'auth.register','auth.login','patient.profile_updated','patient.aadhaar_mock_verified'}
+leaked = acts & {'auth.register','auth.login','patient.profile_updated','patient.aadhaar_recorded'}
 assert not leaked, '  FAIL unscoped rows in the hospital audit trail: %s' % sorted(leaked)
 print('  ok  audit has', len(d), 'entries, all hospital-scoped')"
 
@@ -261,7 +375,7 @@ c=$(code "$API/doctor/queue" -H "$AD"); chk 403 "$c" "admin blocked from doctor 
 
 echo "== ai seam =="
 c=$(code "$API/ai/health"); chk 200 "$c" "ai health"
-python -c "import json;d=json.load(open('./body'));assert d['triage_backend']=='stub';print('  ok  triage backend:',d['triage_backend'])"
+python -c "import json;d=json.load(open('./body'));assert d['triage_backend'] in ('stub','http');print('  ok  triage backend:',d['triage_backend'])"
 c=$(code "$API/ai/pending"); chk 403 "$c" "ai routes need secret"
 if [ -z "$SECRET" ]; then
   echo "  skip AI_CALLBACK_SECRET is empty - skipping the authenticated /ai/* checks"
@@ -283,6 +397,69 @@ print('  ok  pending queue visible to service:',len(d))"
 c=$(code -X POST "$API/ai/triage-callback" -H "$J" -H "x-ai-secret: $SECRET" -d '{"request_id":"11111111-1111-1111-1111-111111111111"}')
 chk 404 "$c" "callback for unknown request"
 fi
+
+echo "== one assistant thread per problem =="
+python -c "
+import json,urllib.request
+
+TOK='$TOK'
+API='$API'
+
+def call(method, path, body=None):
+    r=urllib.request.Request(API+path,method=method,
+        headers={'authorization':'Bearer '+TOK,'content-type':'application/json'},
+        data=None if body is None else json.dumps(body).encode())
+    return json.load(urllib.request.urlopen(r))
+
+# An untouched thread is handed back, so opening the app twice does not litter
+# the list; once it has been used, the next open is a fresh consultation.
+a=call('POST','/conversations',{'kind':'ai'})
+b=call('POST','/conversations',{'kind':'ai'})
+assert a['id']==b['id'], 'an unused thread should be reused'
+call('POST','/conversations/%s/messages' % a['id'],{'body':'my left knee is swollen and stiff'})
+c=call('POST','/conversations',{'kind':'ai'})
+assert c['id']!=a['id'], 'a used thread must not be reused'
+d=call('POST','/conversations',{'kind':'ai','force_new':True})
+assert d['id']!=c['id'], 'force_new must always start a new thread'
+print('  ok  reuse-while-unused, split-once-used, force_new')
+
+threads=call('GET','/conversations?kind=ai')
+assert all(t['kind']=='ai' for t in threads), 'kind filter leaked another kind'
+named=[t for t in threads if t['id']==a['id']][0]
+assert named['title']=='my left knee is swollen and stiff', named['title']
+assert named['patient_messages']==1, named['patient_messages']
+print('  ok  %d threads, titled from the first complaint' % len(threads))
+" || fail=1
+c=$(code "$API/conversations?kind=nope" -H "$A"); chk 400 "$c" "rejects an unknown kind"
+
+echo "== staff provisioning: the admin decides which emails may hold a session =="
+python -c "
+import json,time,urllib.request,urllib.error
+
+API='$API'
+
+def call(method,path,tok=None,body=None):
+    r=urllib.request.Request(API+path,method=method)
+    r.add_header('content-type','application/json')
+    if tok: r.add_header('authorization','Bearer '+tok)
+    d=None if body is None else json.dumps(body).encode()
+    try:
+        with urllib.request.urlopen(r,d,timeout=60) as x:
+            return json.load(x) if x.length != 0 else None
+    except urllib.error.HTTPError as e:
+        return {'__err':e.code}
+
+# Self-signup can never mint staff, whatever the body claims.
+stamp=int(time.time())
+u=call('POST','/auth/register',body={'email':'selfstaff%d@t.io'%stamp,
+    'password':'pw123456','full_name':'Not Staff','role':'doctor'})
+assert u['user']['role']=='patient', u['user']['role']
+print('  ok  self-signup cannot claim a staff role')
+
+# A forged Google token is a 401, not a 500.
+assert call('POST','/auth/google',body={'id_token':'forged'})['__err'] in (401,403)
+print('  ok  an unverifiable Google token is rejected, not a server error')
+" || fail=1
 
 echo "== 404 =="
 c=$(code "$API/nope"); chk 404 "$c" "unknown route"

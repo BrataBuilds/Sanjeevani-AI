@@ -1,0 +1,8 @@
+# Shell scripts run inside Linux containers. A CRLF checkout on Windows makes
+# the kernel read the shebang as `/bin/sh`, and the postgres entrypoint dies
+# with "/bin/sh^M: bad interpreter" part-way through initialising the database.
+* text=auto
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
