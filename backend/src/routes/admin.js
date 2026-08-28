@@ -5,7 +5,7 @@
  */
 import { Router } from 'express';
 import { many, one, tx } from '../lib/db.js';
-import { hashPassword, requireAuth, requireRole, staffHospitalId } from '../lib/auth.js';
+import { googleEnabled, hashPassword, requireAuth, requireRole, staffHospitalId } from '../lib/auth.js';
 import { ageFrom, bad, bool, email as emailOf, enumOf, notFound, str, uuid } from '../lib/http.js';
 import { audit } from '../lib/audit.js';
 
@@ -23,6 +23,8 @@ router.get('/overview', async (req, res) => {
         `select
            count(*) filter (where token_date = current_date)::int as today,
            count(*) filter (where status in ('waiting','in_consult') and token_date = current_date)::int as in_queue,
+           count(*) filter (where status = 'pending_review' and token_date = current_date)::int as awaiting_review,
+           count(*) filter (where status = 'chat' and token_date = current_date)::int as handled_remotely,
            count(*) filter (where urgency = 1 and token_date = current_date)::int as critical_today,
            count(*)::int as all_time
          from visits where hospital_id = $1`,
@@ -172,8 +174,20 @@ router.post('/doctors', async (req, res) => {
   const hospitalId = await staffHospitalId(req.user);
   const email = emailOf(req.body);
   const fullName = str(req.body, 'full_name', { required: true, max: 120 });
-  const password = str(req.body, 'password', { required: true, max: 200 });
-  if (password.length < 8) throw bad('password must be at least 8 characters');
+
+  // Optional on purpose. Creating the doctor is what authorises the address: the
+  // admin decides which email may hold a doctor session, and that person signs in
+  // with Google against it. A password is only needed where Google is not
+  // configured, or where the admin wants to hand over an initial one.
+  const password = str(req.body, 'password', { max: 200 });
+  if (password !== null && password.length < 8) {
+    throw bad('password must be at least 8 characters');
+  }
+  if (password === null && !googleEnabled()) {
+    throw bad(
+      'this server has no Google sign-in configured, so a doctor needs a password to log in',
+    );
+  }
   const departmentId = req.body?.department_id ? uuid(req.body.department_id, 'department_id') : null;
   const regNo = str(req.body, 'reg_no', { max: 40 });
 
@@ -194,7 +208,7 @@ router.post('/doctors', async (req, res) => {
       await c.query(
         `insert into users (email, password_hash, role, full_name)
          values ($1,$2,'doctor',$3) returning id, email, role, full_name`,
-        [email, await hashPassword(password), fullName],
+        [email, password === null ? null : await hashPassword(password), fullName],
       )
     ).rows[0];
     await c.query(
@@ -205,8 +219,9 @@ router.post('/doctors', async (req, res) => {
     return u;
   });
 
-  audit(req.user.id, 'admin.doctor_created', 'user', created.id, { email, departmentId }, hospitalId);
-  res.status(201).json(created);
+  audit(req.user.id, 'admin.doctor_created', 'user', created.id,
+    { email, departmentId, sign_in: password === null ? 'google' : 'password' }, hospitalId);
+  res.status(201).json({ ...created, sign_in: password === null ? 'google' : 'password' });
 });
 
 router.patch('/doctors/:id', async (req, res) => {

@@ -131,6 +131,14 @@ async function failRequest(requestId, message) {
   await audit(null, 'triage.failed', 'triage_request', requestId, { error: message });
 }
 
+/** Loose equality for prose: case, punctuation and spacing are not differences. */
+function sameSentence(a, b) {
+  const norm = (v) =>
+    typeof v === 'string' ? v.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() : null;
+  const left = norm(a);
+  return left !== null && left.length > 0 && left === norm(b);
+}
+
 const insertMessage = (q, conversationId, m) =>
   q(
     `insert into messages (conversation_id, sender_role, sender_user_id, kind, body, payload, file_id)
@@ -194,7 +202,14 @@ export async function applyTriageResult(requestId, rawResult) {
       requestId,
     ]);
 
-    if (t.reply) {
+    // The AI side commonly sets `reply` to the very question it is also sending
+    // as an MCQ, which showed the patient the same sentence twice -- once as a
+    // chat bubble and again as the card's header. Only say it once.
+    const asksTheSameThing = t.follow_up_questions?.some(
+      (question) => sameSentence(question?.question, t.reply),
+    );
+
+    if (t.reply && !asksTheSameThing) {
       await insertMessage(q, req.conversation_id, {
         sender_role: 'ai',
         kind: 'text',
@@ -239,7 +254,8 @@ export async function applyTriageResult(requestId, rawResult) {
       });
     }
 
-    // A specialty (or a red flag) is enough to put the patient in a queue.
+    // A specialty (or a red flag) is enough to route the patient to a doctor.
+    // It is NOT enough to issue a token -- that waits on the doctor's decision.
     let visit = null;
     if (t.specialty || t.red_flag) {
       visit = await createVisit(client, {
@@ -254,12 +270,13 @@ export async function applyTriageResult(requestId, rawResult) {
         await insertMessage(q, req.conversation_id, {
           sender_role: 'system',
           kind: 'status',
-          body: `Token #${visit.token_no} · ${visit.department_name ?? 'Front desk'}` +
+          body:
+            `Sent to ${visit.department_name ?? 'the front desk'} at ${visit.hospital_name}` +
             (visit.doctor_name ? ` · ${visit.doctor_name}` : '') +
-            ` · ${visit.hospital_name}`,
+            '. A doctor will review this and tell you whether to come in.',
           payload: {
             visit_id: visit.id,
-            token_no: visit.token_no,
+            token_no: null,
             state: visit.status,
             hospital: visit.hospital_name,
             department: visit.department_name,
@@ -331,24 +348,17 @@ async function createVisit(client, { patientId, specialty, urgency, triageResult
       ).rows[0] ?? null
     : null;
 
-  // ponytail: max()+1 can collide under simultaneous intake. A per-hospital
-  // sequence or an advisory lock is the fix if two kiosks ever register at once.
-  const nextToken =
-    (
-      await client.query(
-        `select coalesce(max(token_no), 0) + 1 as n from visits
-          where hospital_id = $1 and token_date = current_date`,
-        [hospital.id],
-      )
-    ).rows[0].n;
-
+  // No token here on purpose. Triage routes the patient to a doctor; only that
+  // doctor deciding they should come in issues one -- see POST
+  // /doctor/visits/:id/decision. A consult answered over chat never takes a
+  // queue slot, which is the whole point of having the chat option.
   const visit = (
     await client.query(
       `insert into visits (patient_id, hospital_id, department_id, doctor_user_id,
-                           triage_result_id, token_no, urgency, reason)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
+                           triage_result_id, urgency, reason, status)
+       values ($1,$2,$3,$4,$5,$6,$7,'pending_review') returning *`,
       [patientId, hospital.id, dept?.id ?? null, doctor?.user_id ?? null, triageResultId,
-       nextToken, urgency, reason ?? null],
+       urgency, reason ?? null],
     )
   ).rows[0];
 

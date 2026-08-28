@@ -62,6 +62,28 @@ function VisitDetail() {
     }
   }
 
+  /**
+   * Call the patient in, or answer them here. This is what issues the token —
+   * triage on its own does not, so that talking to the assistant never costs a
+   * queue slot the patient did not need.
+   */
+  async function decide(decision: 'admit' | 'chat') {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/doctor/visits/${id}/decision`, {
+        method: 'POST',
+        body: { decision, ...(notes.trim() ? { note: notes.trim() } : {}) },
+      });
+      await load();
+      if (decision === 'chat') await openCareTeamChat();
+    } catch (err: any) {
+      setError(err?.message ?? 'could not record the decision');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openCareTeamChat() {
     if (!d) return;
     const conv = await api<{ id: string }>(`/doctor/patients/${d.visit.patient_id}/conversation`, {
@@ -83,7 +105,7 @@ function VisitDetail() {
         <Link href="/doctor">← Queue</Link>
       </p>
       <h1>
-        Token #{d.visit.token_no} · {d.patient.full_name}
+        {d.visit.token_no === null ? d.patient.full_name : `Token #${d.visit.token_no} · ${d.patient.full_name}`}
       </h1>
       <p className="muted small">
         {d.visit.hospital_name} · {d.visit.department_name ?? 'no department'} ·{' '}
@@ -102,6 +124,33 @@ function VisitDetail() {
         </p>
       )}
       {error && <p className="error">{error}</p>}
+
+      {d.visit.status === 'pending_review' && (
+        <div className="panel decision">
+          <h2>Does this patient need to come in?</h2>
+          <p className="small muted" style={{ margin: 0 }}>
+            Read the report below first. A token is only issued if you call them in — answering
+            here instead keeps them out of the physical queue. Anything in Notes is saved with
+            the decision.
+          </p>
+          <div className="choices">
+            <button disabled={busy} onClick={() => decide('admit')}>
+              <span className="what">Call them in</span>
+              <span className="why">Issues a token and puts them in today&rsquo;s queue.</span>
+            </button>
+            <button className="secondary" disabled={busy} onClick={() => decide('chat')}>
+              <span className="what">Answer in chat</span>
+              <span className="why">No token, no queue slot. Opens the thread with them.</span>
+            </button>
+          </div>
+        </div>
+      )}
+      {d.visit.status === 'chat' && (
+        <p className="notice">
+          You chose to answer this patient in chat, so they have no token. Calling them in later
+          is still possible from the queue.
+        </p>
+      )}
 
       <div className="cols2">
         <div>
@@ -221,13 +270,18 @@ function VisitDetail() {
                 <Status value={d.visit.status} />
                 {d.visit.urgency_overridden && <span className="small muted"> · urgency overridden</span>}
               </p>
+              {d.visit.token_no === null && (
+                <p className="small muted">
+                  No token yet — these become available once you call the patient in.
+                </p>
+              )}
               <div className="row">
                 {!d.visit.doctor_user_id && (
                   <button disabled={busy} onClick={() => patch({ claim: true })}>
                     Claim
                   </button>
                 )}
-                {d.visit.status === 'waiting' && (
+                {d.visit.status === 'waiting' && d.visit.token_no !== null && (
                   <button disabled={busy} onClick={() => patch({ status: 'in_consult', claim: true })}>
                     Start consult
                   </button>

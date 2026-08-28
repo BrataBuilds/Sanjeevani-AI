@@ -8,7 +8,7 @@ import { Pills, Status, Urgency } from '../ui';
 
 type QueueRow = {
   id: string;
-  token_no: number;
+  token_no: number | null;
   status: string;
   urgency: number;
   urgency_overridden: boolean;
@@ -47,6 +47,7 @@ function Queue() {
   const { data, error, pending, refresh } = usePolling(load, 15000);
 
   const flagged = data?.find((v) => v.red_flag && v.status !== 'done' && v.status !== 'cancelled');
+  const undecided = data?.filter((v) => v.status === 'pending_review') ?? [];
 
   return (
     <>
@@ -70,6 +71,7 @@ function Queue() {
           onChange={setStatus}
           options={[
             { value: '', label: 'All (today)' },
+            { value: 'pending_review', label: 'Needs decision' },
             { value: 'waiting', label: 'Waiting' },
             { value: 'in_consult', label: 'In consult' },
             { value: 'done', label: 'Done' },
@@ -87,15 +89,29 @@ function Queue() {
       {flagged && (
         <div className="banner banner-attn">
           <span className="dot" />
-          <span>Red flag waiting: {flagged.patient_name}, #{flagged.token_no}.</span>
+          <span>
+            Red flag waiting: {flagged.patient_name}
+            {flagged.token_no === null ? ' — no token issued yet.' : `, #${flagged.token_no}.`}
+          </span>
           <span className="spacer" />
           <Link href={`/doctor/visits/${flagged.id}`}>Open</Link>
         </div>
       )}
-      {!flagged && data && data.length > 0 && (
+      {!flagged && undecided.length > 0 && (
         <div className="banner banner-ok">
           <span className="dot" />
-          <span>No red flags waiting. Nothing needs you this minute.</span>
+          <span>
+            {undecided.length} {undecided.length === 1 ? 'patient is' : 'patients are'} waiting on
+            your call-in-or-chat decision. No token is issued until you make it.
+          </span>
+          <span className="spacer" />
+          <Link href={`/doctor/visits/${undecided[0].id}`}>Open the first</Link>
+        </div>
+      )}
+      {!flagged && undecided.length === 0 && data && data.length > 0 && (
+        <div className="banner banner-ok">
+          <span className="dot" />
+          <span>No red flags, nothing awaiting a decision. Nothing needs you this minute.</span>
         </div>
       )}
 
@@ -120,7 +136,15 @@ function Queue() {
             <tbody>
               {data.map((v) => (
                 <tr key={v.id} className={v.red_flag ? 'row-danger' : undefined}>
-                  <td>#{v.token_no}</td>
+                  <td>
+                    {v.token_no === null ? (
+                      <span className="token-none" title="issued when you call the patient in">
+                        not issued
+                      </span>
+                    ) : (
+                      `#${v.token_no}`
+                    )}
+                  </td>
                   <td>
                     <Urgency value={v.urgency} overridden={v.urgency_overridden} />
                     {v.red_flag && (
@@ -149,7 +173,9 @@ function Queue() {
                   </td>
                   <td className="small">{v.doctor_name ?? <span className="muted">unassigned</span>}</td>
                   <td>
-                    <Link href={`/doctor/visits/${v.id}`}>Open</Link>
+                    <Link href={`/doctor/visits/${v.id}`}>
+                      {v.status === 'pending_review' ? 'Decide' : 'Open'}
+                    </Link>
                   </td>
                 </tr>
               ))}

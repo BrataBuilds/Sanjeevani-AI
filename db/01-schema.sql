@@ -11,6 +11,8 @@ create table users (
   email         text not null unique,             -- always stored lowercased
   password_hash text,                             -- null for Google-only accounts
   google_sub    text unique,                      -- Google "sub" claim
+  firebase_uid  text unique,                      -- Firebase Auth uid, the only
+                                                  -- stable id there (email can change)
   role          text not null check (role in ('patient','doctor','admin')),
   full_name     text not null,
   is_active     boolean not null default true,
@@ -208,11 +210,20 @@ create table visits (
   doctor_user_id     uuid references users(id) on delete set null,
   triage_result_id   uuid references triage_results(id) on delete set null,
   token_date         date not null default current_date,
-  token_no           integer not null,
+  -- Null until a doctor decides the patient should physically come in. Triage
+  -- alone does not earn a queue position: a doctor may answer over chat instead,
+  -- and that patient never takes a token. Postgres lets nulls repeat under the
+  -- unique constraint below, which is exactly what we want here.
+  token_no           integer,
   urgency            integer not null default 4 check (urgency between 1 and 5),
   urgency_overridden boolean not null default false,
-  status             text not null default 'waiting'
-                     check (status in ('waiting','in_consult','done','referred','cancelled')),
+  -- pending_review: triaged, waiting on a doctor's call-in-or-chat decision.
+  -- chat:           doctor chose to handle it remotely. No token, no queue slot.
+  status             text not null default 'pending_review'
+                     check (status in ('pending_review','chat','waiting','in_consult',
+                                       'done','referred','cancelled')),
+  -- Set when a token is issued, so "triaged at" and "called in at" stay distinct.
+  admitted_at        timestamptz,
   reason             text,
   doctor_notes       text,
   created_at         timestamptz not null default now(),
@@ -220,6 +231,9 @@ create table visits (
   unique (hospital_id, token_date, token_no)
 );
 create index visits_queue_idx on visits(hospital_id, status, urgency, created_at);
+-- The doctor's review list: everything triaged but not yet decided.
+create index visits_pending_idx on visits(hospital_id, created_at)
+  where status = 'pending_review';
 
 -- ---------------------------------------------------------------- audit
 -- Design_doc §6 requires every AI recommendation and doctor override be logged.

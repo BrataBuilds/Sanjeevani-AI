@@ -352,6 +352,20 @@ button:disabled { opacity: .55; cursor: default; filter: none; }
 .st-in_consult { background: var(--accSoft); color: var(--acc); }
 .st-claimed { background: var(--midSoft); color: var(--mid); }
 .st-done, .st-referred, .st-cancelled { background: var(--surface2); color: var(--ink3); }
+/* Undecided is the one state that needs the doctor to act, so it reads as a
+   prompt rather than as another neutral queue state. */
+.st-pending_review { background: var(--midSoft); color: var(--mid); font-weight: 600; }
+.st-chat { background: var(--accSoft); color: var(--acc); }
+
+/* ------------------------------------------------- call in or answer here */
+
+.decision { border: 1.5px solid var(--mid); background: var(--midSoft); }
+.decision h2 { margin-top: 0; }
+.decision .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.decision .choices button { flex: 1 1 220px; text-align: left; padding: 13px 15px; line-height: 1.35; }
+.decision .choices .what { display: block; font-weight: 600; }
+.decision .choices .why { display: block; font-size: 12px; opacity: 0.75; margin-top: 3px; }
+.token-none { color: var(--ink3); font-style: italic; }
 
 /* --------------------------------------------------------- red flag */
 

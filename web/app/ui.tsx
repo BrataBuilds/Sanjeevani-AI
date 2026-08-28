@@ -42,6 +42,8 @@ export function Urgency({ value, overridden }: { value?: number | null; overridd
 }
 
 const STATUS_LABEL: Record<string, string> = {
+  pending_review: 'needs your decision',
+  chat: 'answering in chat',
   in_consult: 'in consult',
   waiting: 'waiting',
   claimed: 'claimed',
