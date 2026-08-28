@@ -23,6 +23,17 @@ const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 20000);
 
 export const aiConfigured = () => Boolean(URL_BASE);
 
+// stubTriage() returns invented symptoms, an invented specialty and an invented
+// urgency. It is labelled placeholder text in a demo; in front of real patients
+// it is a machine handing out clinical-looking advice nobody wrote. Refuse to
+// start rather than let a production deploy fall back to it silently.
+if (!URL_BASE && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'AI_SERVICE_URL must be set in production -- without it triage answers come from ' +
+    'the placeholder stub, which invents symptoms, specialty and urgency.',
+  );
+}
+
 /**
  * @returns {Promise<{source:'stub'|'http', pending:boolean, result:object|null}>}
  *   pending=true means "accepted, answer will arrive on the callback".

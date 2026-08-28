@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { pool } from './lib/db.js';
+import { bootstrapAdmin } from './lib/bootstrap.js';
 import { HttpError } from './lib/http.js';
 import authRoutes from './routes/auth.js';
 import meRoutes from './routes/me.js';
@@ -67,6 +68,14 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT || 4000);
+
+// Provision the environment's admin before accepting traffic. A bad admin config
+// is a refusal to start, not a warning nobody reads.
+const admin = await bootstrapAdmin();
+if (admin) {
+  console.log(`[api] admin ${admin.email} ${admin.created ? 'created' : 'updated'} for ${admin.hospital}`);
+}
+
 const server = app.listen(port, () =>
   console.log(`[api] listening on :${port}  triage=${process.env.AI_SERVICE_URL ? 'http' : 'stub'}`));
 

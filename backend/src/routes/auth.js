@@ -4,6 +4,7 @@ import {
   googleEnabled, hashPassword, requireAuth, signToken, verifyGoogleIdToken, verifyPassword,
 } from '../lib/auth.js';
 import { ageFrom, bad, email as emailOf, forbidden, str, unauthorized } from '../lib/http.js';
+import { firebaseEnabled, verifyFirebaseIdToken } from '../lib/firebase.js';
 import { audit } from '../lib/audit.js';
 
 const router = Router();
@@ -11,7 +12,8 @@ const router = Router();
 const publicUser = (u) => ({ id: u.id, email: u.email, role: u.role, full_name: u.full_name });
 
 /** Public: lets a client hide the Google button when the server has no client ids. */
-router.get('/config', (_req, res) => res.json({ google_enabled: googleEnabled() }));
+router.get('/config', (_req, res) =>
+  res.json({ google_enabled: googleEnabled(), firebase_enabled: firebaseEnabled() }));
 
 /** Patient self-signup. Doctors and admins are created by a hospital admin. */
 router.post('/register', async (req, res) => {
@@ -95,9 +97,69 @@ router.post('/google', async (req, res) => {
   res.status(created ? 201 : 200).json({ token: signToken(user), user: publicUser(user), created });
 });
 
+/**
+ * Firebase sign-in. The app runs whichever providers are enabled in the Firebase
+ * console and sends the resulting ID token; we verify it and mint our own JWT.
+ *
+ * Staff are not created here. An admin authorises a doctor's address up front, so
+ * a doctor signing in through Firebase links to the account already waiting for
+ * that email and keeps its role. Any unrecognised account is a patient.
+ */
+router.post('/firebase', async (req, res) => {
+  if (!firebaseEnabled()) throw forbidden('firebase sign-in is not configured on this server');
+  const idToken = str(req.body, 'id_token', { required: true, max: 8192 });
+  const f = await verifyFirebaseIdToken(idToken);
+
+  let user = await one('select * from users where firebase_uid = $1', [f.uid]);
+  let created = false;
+
+  if (!user) {
+    // Linking on an unverified address is account takeover: anyone can register
+    // any email with some providers, so an unverified claim would hand them the
+    // doctor account an admin created for that address.
+    const linkable = f.email && f.emailVerified;
+    const byEmail = linkable ? await one('select * from users where email = $1', [f.email]) : null;
+
+    if (byEmail) {
+      user = await one('update users set firebase_uid = $2 where id = $1 returning *', [
+        byEmail.id, f.uid,
+      ]);
+    } else {
+      if (!f.email) {
+        throw bad('this sign-in method provides no email address, which this app requires');
+      }
+      if (!f.emailVerified) {
+        throw forbidden('verify your email address with your sign-in provider first');
+      }
+      user = await tx(async (c) => {
+        const u = (
+          await c.query(
+            `insert into users (email, firebase_uid, role, full_name)
+             values ($1, $2, 'patient', $3) returning *`,
+            [f.email, f.uid, f.name || f.email],
+          )
+        ).rows[0];
+        await c.query('insert into patients (user_id) values ($1)', [u.id]);
+        return u;
+      });
+      created = true;
+    }
+  }
+
+  if (!user.is_active) throw forbidden('this account has been deactivated');
+  audit(user.id, created ? 'auth.register' : 'auth.login', 'user', user.id, {
+    method: 'firebase', provider: f.signInProvider,
+  });
+  res.status(created ? 201 : 200).json({ token: signToken(user), user: publicUser(user), created });
+});
+
 /** Everything the client needs to decide which screen to open first. */
 router.get('/me', requireAuth, async (req, res) => {
-  const out = { user: publicUser(req.user), google_enabled: googleEnabled() };
+  const out = {
+    user: publicUser(req.user),
+    google_enabled: googleEnabled(),
+    firebase_enabled: firebaseEnabled(),
+  };
 
   if (req.user.role === 'patient') {
     const p = await one('select * from patients where user_id = $1', [req.user.id]);

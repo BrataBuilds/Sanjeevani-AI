@@ -199,12 +199,22 @@ router.delete('/documents/:id', async (req, res) => {
 router.post('/aadhaar/verify', async (req, res) => {
   const number = str(req.body, 'aadhaar_number', { required: true, max: 20 }).replace(/\D/g, '');
   if (number.length !== 12) throw bad('aadhaar number must be 12 digits');
+  // aadhaar_verified stays FALSE. No verifier is wired to this endpoint, and a
+  // column that says "verified" is read by staff as a checked identity -- writing
+  // true here would put a claim in the database that nothing ever established.
+  // The last four digits are what the patient typed, stored as what they typed.
+  // Set this to true only from a real UIDAI response.
   await query(
-    'update patients set aadhaar_last4 = $2, aadhaar_verified = true, updated_at = now() where user_id = $1',
+    'update patients set aadhaar_last4 = $2, updated_at = now() where user_id = $1',
     [req.user.id, number.slice(-4)],
   );
-  audit(req.user.id, 'patient.aadhaar_mock_verified', 'patient', req.user.id, null);
-  res.json({ aadhaar_verified: true, aadhaar_last4: number.slice(-4), mock: true });
+  audit(req.user.id, 'patient.aadhaar_recorded', 'patient', req.user.id, { verified: false });
+  res.json({
+    aadhaar_verified: false,
+    aadhaar_last4: number.slice(-4),
+    verification_available: false,
+    message: 'Number recorded. Identity verification is not connected on this server.',
+  });
 });
 
 // ------------------------------------------------------------ visits & bills

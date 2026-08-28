@@ -38,7 +38,19 @@ const googleClient = new OAuth2Client();
 
 export async function verifyGoogleIdToken(idToken) {
   if (!googleEnabled()) throw forbidden('google sign-in is not configured on this server');
-  const ticket = await googleClient.verifyIdToken({ idToken, audience: googleClientIds });
+
+  // A rejected token is the client's problem, not ours. google-auth-library
+  // throws a plain Error for a forged, expired or wrong-audience token, which
+  // reached the generic handler as a 500 -- so a bad sign-in looked like an
+  // outage, and the library's message went out in the response.
+  let ticket;
+  try {
+    ticket = await googleClient.verifyIdToken({ idToken, audience: googleClientIds });
+  } catch (err) {
+    console.warn('[auth] google id token rejected:', err.message);
+    throw unauthorized('google sign-in could not be verified');
+  }
+
   const p = ticket.getPayload();
   if (!p?.sub) throw unauthorized('google token has no subject');
   if (!p.email_verified) throw unauthorized('google account email is not verified');
