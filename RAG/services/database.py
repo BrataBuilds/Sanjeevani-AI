@@ -23,11 +23,21 @@ from dotenv import load_dotenv
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
 
+# This service shares the platform's Postgres. Everything it creates -- the
+# sessions index, the per-session chat tables, symptoms, session_state -- goes in
+# its own schema so it never collides with db/01-schema.sql. `public` stays on the
+# search path so read-only lookups against platform tables still resolve.
+SCHEMA = "rag"
+
+
 def connection():
     if not DB_URL:
         raise RuntimeError("Database URL not provided in the .env file")
     """Handles the db connection, url is included in the .env file. Returns a connection object that can be used for executing queries"""
-    return psycopg.connect(DB_URL.replace("+psycopg", ""))
+    return psycopg.connect(
+        DB_URL.replace("+psycopg", ""),
+        options=f"-c search_path={SCHEMA},public",
+    )
 
 def initialize():
     """
@@ -35,13 +45,14 @@ def initialize():
     | Session_id UUID | timestamp str |
     """
     with connection() as con:
+        con.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA)))
         con.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
         sessions_id UUID PRIMARY KEY,
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
     """)
-    con.commit()
+        con.commit()
 
 
 def create_session_table(session_id: str):

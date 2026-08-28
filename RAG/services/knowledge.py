@@ -9,9 +9,20 @@ import json
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "mock_data"
 SCHEMA_FILE = DATA_DIR / "schema.sql"
+
+# The original symptom set, scored 0-50. Still loaded because it carries 15
+# symptoms the newer files do not -- seizures, sudden vision loss, allergic
+# reaction, blood in stool, high fever among them -- but its scores are doubled
+# on load so everything in the table shares one scale.
+LEGACY_SEED_FILE = DATA_DIR / "seed_symptoms.sql"
+LEGACY_SCALE_MAX = 50
+
+# V2 (single symptoms) and V3 (combinations), already scored 0-100, which is the
+# scale /triage reports on and docs/AI-Integration-Contract.md documents. Where a
+# symptom appears in both generations the newer row wins; see initialize().
 SEED_FILES = (
-    DATA_DIR / "seed_symptoms.sql",
-    DATA_DIR / "seed_doctors.sql",
+    DATA_DIR / "seed_symptomsV2.sql",
+    DATA_DIR / "seed_symptomsV3.sql",
 )
 
 def _execute_sql_file(path: Path) -> None:
@@ -22,10 +33,44 @@ def _execute_sql_file(path: Path) -> None:
 
 
 def initialize() -> None:
-    """Create and idempotently seed the knowledge-base tables."""
+    """Create and idempotently seed the knowledge-base tables.
+
+    symptom_name lost its UNIQUE constraint upstream, so the seeds can no longer
+    rely on ON CONFLICT DO NOTHING -- re-running them would stack a fresh copy of
+    every symptom on each boot. The table is a static knowledge base built purely
+    from these files, so it is rebuilt from empty instead.
+    """
     _execute_sql_file(SCHEMA_FILE)
+
+    with connection() as con:
+        con.execute("TRUNCATE symptoms RESTART IDENTITY")
+        con.commit()
+
+    _execute_sql_file(LEGACY_SEED_FILE)
+    with connection() as con:
+        # Bring the 0-50 generation onto the 0-100 scale everything else uses.
+        # Safe to run over the whole table here: only the legacy rows exist yet.
+        con.execute(
+            "UPDATE symptoms SET urgency_score = urgency_score * %s",
+            (100 / LEGACY_SCALE_MAX,),
+        )
+        con.commit()
+
     for seed_file in SEED_FILES:
         _execute_sql_file(seed_file)
+
+    with connection() as con:
+        # Keep the highest symptom_id per name: rows are inserted oldest
+        # generation first, so this drops the legacy copy of anything V2 or V3
+        # also describes and leaves one row per symptom for check_symptoms.
+        con.execute(
+            """
+            DELETE FROM symptoms a USING symptoms b
+             WHERE LOWER(a.symptom_name) = LOWER(b.symptom_name)
+               AND a.symptom_id < b.symptom_id
+            """
+        )
+        con.commit()
 
 
 def _symptom_record(row: tuple) -> dict:
@@ -77,10 +122,14 @@ def get_symptoms_by_ids(symptom_ids: list[str]) -> list[dict]:
 
     
 def available_specialities()->list[str]:
-    """Return all the specialities available right now"""
+    """Return all the specialities available right now.
+
+    Reads the platform's departments table -- the routing key the backend maps a
+    triage result onto -- rather than a mock doctors table of our own.
+    """
     with connection() as con:
-        rows =  con.execute(
-            """SELECT DISTINCT specialty FROM doctors"""
+        rows = con.execute(
+            """SELECT DISTINCT specialty FROM departments ORDER BY specialty"""
         )
         return [str(r[0]) for r in rows]
 
