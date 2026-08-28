@@ -10,7 +10,9 @@ Thumbs.db
 .venv/
 uv.lock
 __pycache__/
-
+*.sqlite3
+*.pickle
+symptoms_inserts.sql
 # node
 node_modules/
 npm-debug.log*
