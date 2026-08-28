@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "agno>=3.0.0",
+    "chromadb>=1.5.9",
     "fastapi[standard]>=0.141.1",
     "google-genai>=2.20.0",
     "psycopg[binary]>=3.3.4",
+    "sentence-transformers>=6.0.0",
     "sqlalchemy>=2.0.52",
 ]
 
@@ -18,3 +20,6 @@ dev = [
 ]
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "live: exercises FastAPI against configured PostgreSQL and Gemini services",
+]

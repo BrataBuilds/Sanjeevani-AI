@@ -1,27 +1,31 @@
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from uuid import UUID
+from schemas.triage import MCQOptions
+from typing import Literal
+
+
 class UserPrompt(BaseModel):
-    """Return the prompt given by the user"""
-    timestamp : datetime
-    user_query: str
-    session_id : UUID | None = None
+    """A patient message. Timestamps are assigned by the server."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    user_query: str = Field(min_length=1, max_length=2_000)
+    session_id: UUID | None = None
+
 class ChatResponse(BaseModel):
-    """Return the response of the llm"""
-    timestamp : datetime
+    timestamp: AwareDatetime
     session_id: UUID
-    response: str | None = None
-    
+    response_type: Literal["text", "mcq"]
+    content: str | MCQOptions
+
 class ChatEntry(BaseModel):
     """Combine the chats of user and agent into one"""
     chat_id: UUID
-    role: str # Decides whether the chat is from user / assistant
-    timestamp: datetime
+    role: Literal["user", "assistant"]
+    timestamp: AwareDatetime
     content: str
+
+
 class HistoryResponse(BaseModel):
     """Return list of chats"""
-    session_id : UUID
-    # Store history as a list of user's prompts and chat response
-    chats : list[ChatEntry]
-    
-    
+    session_id: UUID
+    chats: list[ChatEntry]

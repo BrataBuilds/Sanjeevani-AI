@@ -1,5 +1,4 @@
 """
-I want to use postgres using python and i want to implement the following:
 TODOs: 1.
 db name: chat_sessions
 db_url: taken from the .env file
@@ -24,10 +23,9 @@ from dotenv import load_dotenv
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
 
-if not DB_URL:
-    raise RuntimeError("Database URL not provided in the .env file")
-
 def connection():
+    if not DB_URL:
+        raise RuntimeError("Database URL not provided in the .env file")
     """Handles the db connection, url is included in the .env file. Returns a connection object that can be used for executing queries"""
     return psycopg.connect(DB_URL.replace("+psycopg", ""))
 
@@ -43,7 +41,7 @@ def initialize():
         timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
     """)
-        con.commit()
+    con.commit()
 
 
 def create_session_table(session_id: str):
@@ -96,7 +94,7 @@ def session_exists(session_id: str)->bool:
     """Returns if a given chat session id exists or not"""
     with connection() as con:
         row = con.execute(
-            "SELECT 1 FROM sessions WHERE session_id = %s", (session_id,)).fetchone()   
+            "SELECT 1 FROM sessions WHERE sessions_id = %s", (session_id,)).fetchone()   
         return row is not None
     
     

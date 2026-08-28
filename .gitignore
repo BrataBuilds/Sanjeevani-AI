@@ -3,7 +3,9 @@
 .idea/
 .DS_Store
 Thumbs.db
-
+.pytest_cache/
+*.json
+*.bin
 # python (RAG)
 .venv/
 uv.lock
