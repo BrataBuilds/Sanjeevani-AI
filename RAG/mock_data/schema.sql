@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS doctors (
 );
 CREATE TABLE IF NOT EXISTS symptoms (
     symptom_id         SERIAL PRIMARY KEY,
-    symptom_name       TEXT NOT NULL UNIQUE,
+    symptom_name       TEXT NOT NULL,
     description        TEXT,
     specialties        TEXT[] NOT NULL,
     related_symptoms   TEXT[],
