@@ -150,7 +150,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           : 'New here? Create an account'),
                     ),
 
-                    if (state.googleEnabled) ...[
+                    if (state.firebaseEnabled) ...[
+                      const SizedBox(height: SanjeevaniSpace.sm),
+                      OutlinedButton.icon(
+                        onPressed: _busy
+                            ? null
+                            : () => _run(AppState.instance.signInWithFirebase),
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: const Text('Continue with Google'),
+                      ),
+                    ],
+
+                    // Only offered when Firebase is not handling sign-in. Both
+                    // buttons at once would be two doors to the same account with
+                    // different identifiers behind them.
+                    if (!state.firebaseEnabled && state.googleEnabled) ...[
                       const SizedBox(height: SanjeevaniSpace.sm),
                       OutlinedButton.icon(
                         onPressed: _busy
@@ -168,12 +182,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: textTheme.bodySmall?.copyWith(color: c.ink3),
                       textAlign: TextAlign.center,
                     ),
-                    if (!state.googleEnabled)
+                    if (!state.googleEnabled && !state.firebaseEnabled)
                       Padding(
                         padding: const EdgeInsets.only(top: SanjeevaniSpace.sm),
                         child: Text(
-                          'Google sign-in is switched off on this server '
-                          '(GOOGLE_CLIENT_IDS is not set).',
+                          'Single sign-on is switched off on this server. Set '
+                          'FIREBASE_PROJECT_ID here and the FIREBASE_* build '
+                          'values in the app, or GOOGLE_CLIENT_IDS, to turn it on.',
                           style: textTheme.bodySmall?.copyWith(color: c.ink3),
                           textAlign: TextAlign.center,
                         ),

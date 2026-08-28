@@ -120,12 +120,17 @@ class Api {
 
   // ----------------------------------------------------------------- auth
 
-  Future<bool> googleEnabled() async {
+  /// Which sign-in methods this server will actually accept. Asked once at boot
+  /// so the login screen never offers a button the backend would reject.
+  Future<Map<String, bool>> authConfig() async {
     try {
       final cfg = await get('/auth/config');
-      return cfg['google_enabled'] == true;
+      return {
+        'google': cfg['google_enabled'] == true,
+        'firebase': cfg['firebase_enabled'] == true,
+      };
     } catch (_) {
-      return false;
+      return const {'google': false, 'firebase': false};
     }
   }
 
@@ -138,6 +143,9 @@ class Api {
 
   Future<Map<String, dynamic>> loginWithGoogle(String idToken) async =>
       (await post('/auth/google', {'id_token': idToken})) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> loginWithFirebase(String idToken) async =>
+      (await post('/auth/firebase', {'id_token': idToken})) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> me() async => (await get('/auth/me')) as Map<String, dynamic>;
 
@@ -199,10 +207,17 @@ class Api {
 
   // ----------------------------------------------------------------- chat
 
-  Future<List> conversations() async => (await get('/conversations')) as List;
+  Future<List> conversations({String? kind}) async =>
+      (await get('/conversations', kind == null ? null : {'kind': kind})) as List;
 
-  Future<Map<String, dynamic>> openAiThread() async =>
-      (await post('/conversations', {'kind': 'ai'})) as Map<String, dynamic>;
+  /// [forceNew] starts a separate consultation instead of continuing the last
+  /// one. Without it the server hands back an untouched thread if there is one,
+  /// so opening the app repeatedly does not pile up empty consultations.
+  Future<Map<String, dynamic>> openAiThread({bool forceNew = false}) async =>
+      (await post('/conversations', {
+        'kind': 'ai',
+        if (forceNew) 'force_new': true,
+      })) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> openCareTeamThread(String hospitalId) async =>
       (await post('/conversations', {'kind': 'care_team', 'hospital_id': hospitalId}))
@@ -239,4 +254,12 @@ class Api {
   ) async =>
       (await post('/conversations/$conversationId/mcq-answer',
           {'message_id': messageId, 'answers': answers})) as Map<String, dynamic>;
+}
+
+/// A visit only carries a token once a doctor has called the patient in, so a
+/// null token is "not issued yet", never "Token #null".
+String visitHeadline(Map v) {
+  final token = v['token_no'];
+  final hospital = v['hospital_name'] ?? 'Hospital';
+  return token == null ? 'Awaiting review · $hospital' : 'Token #$token · $hospital';
 }

@@ -211,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               contentPadding: EdgeInsets.zero,
                               dense: true,
                               leading: const Icon(Icons.confirmation_number_outlined),
-                              title: Text('Token #${v['token_no']} · ${v['hospital_name']}'),
+                              title: Text(visitHeadline(v)),
                               subtitle: Text([
                                 '${v['token_date']}',
                                 '${v['status']}'.replaceAll('_', ' '),

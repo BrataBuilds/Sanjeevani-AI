@@ -124,7 +124,7 @@ class _BillsScreenState extends State<BillsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text('Token #${v['token_no']} · ${v['hospital_name']}',
+                                  Text(visitHeadline(v),
                                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                                   Text(
                                     [

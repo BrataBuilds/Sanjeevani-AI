@@ -50,14 +50,21 @@ async function access(user, conversationId) {
 
 router.get('/', async (req, res) => {
   if (req.user.role === 'patient') {
+    // ?kind=ai lists the assistant threads for the picker; omitted lists everything.
+    const kind = req.query.kind ? enumOf(req.query, 'kind', ['ai', 'care_team']) : null;
     return res.json(await many(
       `select c.*, h.name as hospital_name,
               (select body from messages m where m.conversation_id = c.id
-                order by m.created_at desc limit 1) as last_message
+                order by m.created_at desc limit 1) as last_message,
+              (select count(*)::int from messages m
+                where m.conversation_id = c.id and m.sender_role = 'patient') as patient_messages,
+              exists (select 1 from triage_requests t
+                       where t.conversation_id = c.id and t.status = 'pending') as triage_pending
          from conversations c
          left join hospitals h on h.id = c.hospital_id
-        where c.patient_id = $1 order by c.last_message_at desc`,
-      [req.user.id]));
+        where c.patient_id = $1 and ($2::text is null or c.kind = $2)
+        order by c.last_message_at desc`,
+      [req.user.id, kind]));
   }
   const hospitalId = await staffHospitalId(req.user);
   res.json(await many(
@@ -70,6 +77,64 @@ router.get('/', async (req, res) => {
     [hospitalId]));
 });
 
+/**
+ * The short intake every triage thread opens with, before the assistant asks
+ * anything of its own.
+ *
+ * Registration questions, not clinical ones: nothing in this repo reads the
+ * answers or decides anything from them. They are stored as an ordinary
+ * mcq_answer message so they ride into the AI side's payload with the rest of
+ * the transcript, which is the whole reason they are asked here rather than in
+ * the app -- see docs/AI-Integration-Contract.md.
+ *
+ * Asked one at a time. A wall of four questions reads like a form to fill in;
+ * one at a time reads like being asked, which is the point of opening in a chat
+ * rather than a registration screen. `step` is the index of the one being asked.
+ */
+const INTAKE_QUESTIONS = [
+  {
+    id: 'who_for',
+    question: 'Who is this for?',
+    options: ['Myself', 'My child', 'A parent or elder', 'Someone else'],
+    multi: false,
+  },
+  {
+    id: 'duration',
+    question: 'How long has this been going on?',
+    options: ['Started today', '1-3 days', 'About a week', 'Longer than a week'],
+    multi: false,
+  },
+  {
+    id: 'severity',
+    question: 'How much is it affecting you right now?',
+    options: ['Barely noticeable', 'Uncomfortable', 'Hard to get through the day', 'I cannot manage'],
+    multi: false,
+  },
+  {
+    id: 'care_so_far',
+    question: 'Have you done anything about it so far?',
+    options: ['Nothing yet', 'Took medicine on my own', 'Saw a doctor already', 'Been to a hospital'],
+    multi: false,
+  },
+];
+
+/** The message that asks intake question `step`. */
+function askIntake(step) {
+  return {
+    sender_role: 'ai',
+    kind: 'mcq',
+    body: INTAKE_QUESTIONS[step].question,
+    // intake:true keeps answering these from firing a triage round; there is no
+    // complaint to triage yet.
+    payload: {
+      intake: true,
+      step,
+      total: INTAKE_QUESTIONS.length,
+      questions: [INTAKE_QUESTIONS[step]],
+    },
+  };
+}
+
 /** Patients open threads. One 'ai' thread is reused by default; care_team needs a hospital. */
 router.post('/', async (req, res) => {
   if (req.user.role !== 'patient') throw forbidden('only patients start conversations');
@@ -77,13 +142,22 @@ router.post('/', async (req, res) => {
   const hospitalId = req.body?.hospital_id ? uuid(req.body.hospital_id, 'hospital_id') : null;
   if (kind === 'care_team' && !hospitalId) throw bad('hospital_id is required for a care_team thread');
 
+  // A patient has one thread per problem, the way they would have one visit per
+  // problem -- a rash in March and chest pain in August are not one conversation,
+  // and the assistant reads the whole transcript back on every turn, so mixing
+  // them actively degrades the triage. `force_new` is what the "New consultation"
+  // button sends; without it an untouched thread is reused so that merely opening
+  // the app twice does not litter the list with empty ones.
   if (kind === 'ai' && !req.body?.force_new) {
-    const existing = await one(
-      `select * from conversations where patient_id = $1 and kind = 'ai'
-        order by last_message_at desc limit 1`,
+    const reusable = await one(
+      `select c.* from conversations c
+        where c.patient_id = $1 and c.kind = 'ai'
+          and not exists (select 1 from messages m
+                           where m.conversation_id = c.id and m.sender_role = 'patient')
+        order by c.last_message_at desc limit 1`,
       [req.user.id],
     );
-    if (existing) return res.json(existing);
+    if (reusable) return res.json(reusable);
   }
 
   const title = str(req.body, 'title', { max: 120 }) ?? (kind === 'ai' ? 'Triage assistant' : 'Care team');
@@ -96,8 +170,10 @@ router.post('/', async (req, res) => {
     await insert(c.id, {
       sender_role: 'ai',
       kind: 'text',
-      body: 'Hello. Tell me what is bothering you, in whichever language you are comfortable with.',
+      body: `Hello. ${INTAKE_QUESTIONS.length} quick questions first, then tell me what is ` +
+        'bothering you — in whichever language you are comfortable with.',
     });
+    await insert(c.id, askIntake(0));
   }
   res.status(201).json(c);
 });
@@ -175,6 +251,26 @@ async function afterPost(conversation, { triggerTriage }) {
   return true;
 }
 
+/**
+ * Name an assistant thread after the complaint that opened it, so the patient's
+ * list reads "Itchy rash on both arms" rather than five rows of "Triage
+ * assistant". Only ever fires on the first patient message of an ai thread, so a
+ * later message never renames a thread out from under them.
+ */
+async function titleFromFirstComplaint(conversation, senderRole, body) {
+  if (conversation.kind !== 'ai' || senderRole !== 'patient') return;
+  if (conversation.title !== 'Triage assistant') return;
+
+  const said = body.replace(/\s+/g, ' ').trim();
+  if (!said) return;
+  const title = said.length > 60 ? `${said.slice(0, 57).trimEnd()}...` : said;
+  await query(
+    `update conversations set title = $2
+      where id = $1 and title = 'Triage assistant'`,
+    [conversation.id, title],
+  );
+}
+
 router.post('/:id/messages', async (req, res) => {
   const { conversation, canPost } = await access(req.user, req.params.id);
   if (!canPost) throw forbidden('you cannot post in this conversation');
@@ -194,6 +290,8 @@ router.post('/:id/messages', async (req, res) => {
     kind: 'text',
     body,
   });
+
+  await titleFromFirstComplaint(conversation, senderRole, body);
 
   const pending = await afterPost(conversation, {
     triggerTriage: conversation.kind === 'ai' && senderRole === 'patient',
@@ -245,6 +343,7 @@ router.post('/:id/mcq-answer', async (req, res) => {
     [questionMessageId, conversation.id],
   );
   if (!asked) throw notFound('question set');
+  const isIntake = asked.payload?.intake === true;
 
   const questions = asked.payload?.questions ?? [];
   const summary = questions
@@ -265,9 +364,29 @@ router.post('/:id/mcq-answer', async (req, res) => {
   // patient's symptom answers into the audit detail duplicates clinical data
   // into a second table with a different read path.
   audit(req.user.id, 'chat.mcq_answered', 'message', message.id,
-    { answered: Object.keys(answers).length }, conversation.hospital_id);
-  await afterPost(conversation, { triggerTriage: conversation.kind === 'ai' });
-  res.status(201).json({ message, triage_pending: true });
+    { answered: Object.keys(answers).length, intake: isIntake || undefined },
+    conversation.hospital_id);
+
+  // The opening intake is context, not a complaint -- triaging on it alone would
+  // burn the assistant's first turn on "Myself, 1-3 days" with no symptom in it.
+  const pending = await afterPost(conversation, {
+    triggerTriage: conversation.kind === 'ai' && !isIntake,
+  });
+
+  if (isIntake) {
+    const next = (asked.payload?.step ?? 0) + 1;
+    await insert(
+      conversation.id,
+      next < INTAKE_QUESTIONS.length
+        ? askIntake(next)
+        : {
+            sender_role: 'ai',
+            kind: 'text',
+            body: 'Thank you. Now tell me what is bothering you, in your own words.',
+          },
+    );
+  }
+  res.status(201).json({ message, triage_pending: pending });
 });
 
 export default router;

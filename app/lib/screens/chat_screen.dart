@@ -252,16 +252,41 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: !_loaded
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _messages.length + (_thinking ? 1 : 0),
-                    itemBuilder: (context, i) {
-                      if (i == _messages.length) return const _Thinking();
-                      return _MessageTile(
-                        message: _messages[i],
-                        onAnswerMcq: _answerMcq,
-                        busy: _sending,
+                : Builder(
+                    builder: (context) {
+                      // An answered question is shown by the option staying lit on
+                      // the card it was asked on. Repeating the choice back as a
+                      // chat bubble says nothing the card does not already show,
+                      // so the mcq_answer messages are read for their answers and
+                      // never rendered. They still go to the server, and the AI
+                      // side still reads them out of the transcript.
+                      final visible = <Map<String, dynamic>>[];
+                      final chosen = <String, Map>{};
+                      for (final m in _messages) {
+                        if (m['kind'] == 'mcq_answer') {
+                          final payload = m['payload'] as Map?;
+                          final askedId = payload?['in_reply_to'];
+                          final answers = payload?['answers'];
+                          if (askedId is String && answers is Map) chosen[askedId] = answers;
+                          continue;
+                        }
+                        visible.add(m);
+                      }
+
+                      return ListView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: visible.length + (_thinking ? 1 : 0),
+                        itemBuilder: (context, i) {
+                          if (i == visible.length) return const _Thinking();
+                          final m = visible[i];
+                          return _MessageTile(
+                            message: m,
+                            answered: chosen[m['id']],
+                            onAnswerMcq: _answerMcq,
+                            busy: _sending,
+                          );
+                        },
                       );
                     },
                   ),
@@ -394,8 +419,34 @@ class _StatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (payload == null || payload!['token_no'] == null) return const SizedBox.shrink();
+    if (payload == null) return const SizedBox.shrink();
     final c = context.sc;
+    final state = payload!['state'];
+
+    // A token only exists once a doctor has asked the patient to come in. Until
+    // then the card has to say what is actually happening, not go blank.
+    if (payload!['token_no'] == null) {
+      if (state == 'pending_review') {
+        return _WaitingCard(
+          tint: c.mid,
+          title: 'A doctor is reviewing this',
+          detail: [
+            if (payload!['department'] != null) '${payload!['department']}',
+            if (payload!['hospital'] != null) '${payload!['hospital']}',
+          ].join(' · '),
+          note: 'You will get a token here only if they ask you to come in.',
+        );
+      }
+      if (state == 'chat') {
+        return _WaitingCard(
+          tint: c.acc,
+          title: 'Your doctor will answer you here',
+          detail: payload!['doctor'] == null ? '' : '${payload!['doctor']}',
+          note: 'No hospital visit needed for now, so no token.',
+        );
+      }
+      return const SizedBox.shrink();
+    }
     final urgent = payload!['red_flag'] == true || payload!['urgency'] == 1;
     final bg = urgent ? c.dan : c.acc;
     final fg = urgent ? c.accInk : c.accInk;
@@ -453,10 +504,79 @@ class _StatusBar extends StatelessWidget {
   }
 }
 
+/// The two states before a token exists. Same shape as the token card so the
+/// thread does not jump around when one replaces the other.
+class _WaitingCard extends StatelessWidget {
+  const _WaitingCard({
+    required this.tint,
+    required this.title,
+    required this.detail,
+    required this.note,
+  });
+
+  final Color tint;
+  final String title;
+  final String detail;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.sc;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(SanjeevaniRadius.lg),
+        border: Border.all(color: tint.withValues(alpha: 0.45), width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(top: 6, right: 12),
+            decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
+                if (detail.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(detail, style: TextStyle(fontSize: 14, color: c.ink2)),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(note, style: TextStyle(fontSize: 13, color: c.ink3)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MessageTile extends StatelessWidget {
-  const _MessageTile({required this.message, required this.onAnswerMcq, required this.busy});
+  const _MessageTile({
+    required this.message,
+    required this.onAnswerMcq,
+    required this.busy,
+    this.answered,
+  });
 
   final Map<String, dynamic> message;
+
+  /// question id -> the option this patient picked, once they have answered.
+  final Map? answered;
   final Future<void> Function(Map<String, dynamic>, Map<String, dynamic>) onAnswerMcq;
   final bool busy;
 
@@ -483,7 +603,12 @@ class _MessageTile extends StatelessWidget {
     Widget content;
     switch (kind) {
       case 'mcq':
-        content = _McqCard(message: message, onSubmit: onAnswerMcq, busy: busy);
+        content = _McqCard(
+          message: message,
+          onSubmit: onAnswerMcq,
+          busy: busy,
+          answered: answered,
+        );
         break;
       case 'report':
         content = _ReportCard(payload: message['payload'] as Map? ?? const {});
@@ -619,9 +744,18 @@ class _Bubble extends StatelessWidget {
 
 /// The MCQ UI from appfeature.md — the assistant asks, the patient taps.
 class _McqCard extends StatefulWidget {
-  const _McqCard({required this.message, required this.onSubmit, required this.busy});
+  const _McqCard({
+    required this.message,
+    required this.onSubmit,
+    required this.busy,
+    this.answered,
+  });
 
   final Map<String, dynamic> message;
+
+  /// Set once the server has this card's answers, so a card stays answered
+  /// across a reload rather than resetting to a fresh set of options.
+  final Map? answered;
   final Future<void> Function(Map<String, dynamic>, Map<String, dynamic>) onSubmit;
   final bool busy;
 
@@ -633,11 +767,34 @@ class _McqCardState extends State<_McqCard> {
   final Map<String, String> _answers = {};
   bool _submitted = false;
 
+  /// A single-choice question answers itself the moment an option is tapped.
+  /// Asking someone to pick one of four and then press Send is a second decision
+  /// about the same thing; only a multi-question card needs the button.
+  bool _sendsOnTap(List questions) =>
+      questions.length == 1 && questions.first['multi'] != true;
+
+  Future<void> _choose(Map question, String option, List questions) async {
+    if (_submitted) return;
+    setState(() => _answers[question['id'] as String] = option);
+    if (!_sendsOnTap(questions)) return;
+    setState(() => _submitted = true);
+    await widget.onSubmit(widget.message, Map<String, dynamic>.from(_answers));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.sc;
     final questions = ((widget.message['payload'] as Map?)?['questions'] as List?) ?? const [];
     final complete = questions.every((q) => _answers.containsKey(q['id']));
+
+    // The server's record wins: it survives a reload, local state does not.
+    final recorded = widget.answered;
+    final locked = _submitted || recorded != null;
+    final autoSend = _sendsOnTap(questions);
+    String? pickedFor(Object? id) {
+      final fromServer = recorded == null ? null : recorded[id];
+      return fromServer is String ? fromServer : _answers[id];
+    }
 
     return Container(
       width: double.infinity,
@@ -651,10 +808,14 @@ class _McqCardState extends State<_McqCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('A few quick questions',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          // Only a multi-question card needs a heading of its own: a single
+          // question is its own heading, and repeating it above the options is
+          // the same sentence twice.
+          if (questions.length > 1)
+            Text('A few quick questions',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           for (final q in questions) ...[
-            const SizedBox(height: SanjeevaniSpace.md),
+            if (questions.length > 1) const SizedBox(height: SanjeevaniSpace.md),
             Text('${q['question']}',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.ink)),
             const SizedBox(height: SanjeevaniSpace.sm),
@@ -663,38 +824,40 @@ class _McqCardState extends State<_McqCard> {
                 padding: const EdgeInsets.only(bottom: SanjeevaniSpace.sm),
                 child: _McqOption(
                   label: '$option',
-                  selected: _answers[q['id']] == option,
-                  disabled: _submitted,
-                  onTap: () => setState(() => _answers[q['id'] as String] = '$option'),
+                  selected: pickedFor(q['id']) == '$option',
+                  disabled: locked || widget.busy,
+                  onTap: () => _choose(q, '$option', questions),
                 ),
               ),
           ],
-          const SizedBox(height: SanjeevaniSpace.sm),
-          if (!_submitted)
-            FilledButton(
-              onPressed: (!complete || widget.busy)
-                  ? null
-                  : () async {
-                      setState(() => _submitted = true);
-                      await widget.onSubmit(widget.message, _answers);
-                    },
-              child: const Text('Send answer'),
-            )
-          else
-            Row(
-              children: [
-                Container(
-                  width: 17,
-                  height: 17,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.ink3)),
-                  child: Text('✓', style: TextStyle(fontSize: 10, color: c.ink3)),
-                ),
-                const SizedBox(width: SanjeevaniSpace.sm),
-                Text('Answer sent. Tap the assistant to change it.',
-                    style: TextStyle(fontSize: 14, color: c.ink3)),
-              ],
-            ),
+          if (!autoSend) ...[
+            const SizedBox(height: SanjeevaniSpace.sm),
+            if (!locked)
+              FilledButton(
+                onPressed: (!complete || widget.busy)
+                    ? null
+                    : () async {
+                        setState(() => _submitted = true);
+                        await widget.onSubmit(widget.message, _answers);
+                      },
+                child: const Text('Send answer'),
+              )
+            else
+              Row(
+                children: [
+                  Container(
+                    width: 17,
+                    height: 17,
+                    alignment: Alignment.center,
+                    decoration:
+                        BoxDecoration(shape: BoxShape.circle, border: Border.all(color: c.ink3)),
+                    child: Text('✓', style: TextStyle(fontSize: 10, color: c.ink3)),
+                  ),
+                  const SizedBox(width: SanjeevaniSpace.sm),
+                  Text('Answer sent.', style: TextStyle(fontSize: 14, color: c.ink3)),
+                ],
+              ),
+          ],
         ],
       ),
     );
