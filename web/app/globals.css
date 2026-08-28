@@ -3,29 +3,36 @@
    Density is the feature here: smaller type, tighter rows, tables instead of
    stacked cards, monospace for tokens/timestamps/specialty keys. */
 
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Oriya:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500&display=swap');
 
 :root {
-  --canvas: #faf0d9;
-  --bg: #fdf6e6;
-  --surface: #fffcf4;
-  --surface2: #f6edd8;
-  --ink: #1a3126;
-  --ink2: #4c6056;
-  --ink3: #63756c;
-  --line: #dbe1cb;
-  --acc: #31785e;
-  --accSoft: #d1f9e6;
+  --canvas: #e9ecec;
+  --bg: #f4f6f6;
+  --surface: #ffffff;
+  --surface2: #eceff0;
+  --ink: #13181a;
+  --ink2: #576063;
+  --ink3: #899093;
+  --line: #dde2e3;
+  --acc: #357574;
+  --accSoft: #dff3f3;
   --accInk: #ffffff;
-  --dan: #b5242a;
-  --danSoft: #ffe4e1;
-  --mid: #906106;
-  --midSoft: #ffedd6;
-  --stub: #73756c;
+  --dan: #b63132;
+  --danSoft: #fee8e6;
+  --mid: #a06f30;
+  --midSoft: #ffefdd;
+  --stub: #8f9699;
 
-  --serif: 'Instrument Serif', Georgia, serif;
-  --sans: Figtree, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: Figtree, 'Noto Sans Oriya', 'Noto Sans Devanagari', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-press: 120ms;
+  --dur-ui: 200ms;
+  --dur-bar: 320ms;
+  --mat-blur: 20px;
+  --mat-alpha: 80%;
 
   /* kept for anything still reading the old names */
   --accent: var(--acc);
@@ -36,22 +43,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #102119;
-    --bg: #182b22;
-    --surface: #22372d;
-    --surface2: #2e4439;
-    --ink: #faf3e3;
-    --ink2: #b8beaa;
-    --ink3: #93a495;
-    --line: #3c5348;
-    --acc: #87e0b7;
-    --accSoft: #224a39;
-    --accInk: #102119;
-    --dan: #f87e77;
-    --danSoft: #592624;
-    --mid: #e3b86e;
-    --midSoft: #4a3716;
-    --stub: #8b938c;
+    --canvas: #0a0d0d;
+    --bg: #121617;
+    --surface: #181d1e;
+    --surface2: #212829;
+    --ink: #eef2f2;
+    --ink2: #a8b2b4;
+    --ink3: #7c8688;
+    --line: #2b3334;
+    --acc: #68b4b3;
+    --accSoft: #0a3535;
+    --accInk: #0a0d0d;
+    --dan: #ed756e;
+    --danSoft: #4b1d1b;
+    --mid: #e1ac6e;
+    --midSoft: #432a08;
+    --stub: #6c7679;
   }
 }
 
@@ -63,10 +70,66 @@ body {
   color: var(--ink);
   font: 14px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
 }
 
 a { color: var(--acc); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a:hover { color: color-mix(in srgb, var(--acc) 80%, black); text-decoration: underline; }
+
+button, input, select, textarea { font-optical-sizing: auto; }
+button {
+  transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-press) ease,
+    border-color var(--dur-press) ease, filter var(--dur-press) ease, box-shadow var(--dur-press) ease;
+}
+button:active:not(:disabled) { transform: scale(.98); }
+input, select, textarea { transition: border-color var(--dur-press) ease; }
+tbody tr { transition: background-color 100ms ease; }
+header.topbar nav a { transition: background-color var(--dur-press) ease, color var(--dur-press) ease; }
+
+/* Structural chrome reads as the heavier material; interactive surfaces stay
+   lighter. Never a light translucent surface stacked on another. */
+.mat {
+  background: color-mix(in srgb, var(--surface) var(--mat-alpha), transparent);
+  backdrop-filter: blur(var(--mat-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--mat-blur)) saturate(180%);
+}
+.mat-rail {
+  background: color-mix(in srgb, var(--surface2) 86%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+
+@keyframes sj-rise { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes sj-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes sj-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sk { 0%, 100% { opacity: .5; } 50% { opacity: .85; } }
+
+.panel, .table-scroll, .redflag { animation: sj-rise var(--dur-ui) var(--ease-out) both; }
+.grid > .stat { animation: sj-rise var(--dur-ui) var(--ease-out) both; }
+.grid > .stat:nth-child(2) { animation-delay: 40ms; }
+.grid > .stat:nth-child(3) { animation-delay: 80ms; }
+.grid > .stat:nth-child(4) { animation-delay: 120ms; }
+.grid > .stat:nth-child(n+5) { animation-delay: 160ms; }
+.bubble-body { animation: sj-rise var(--dur-ui) var(--ease-out) both; }
+.bars-track > div {
+  transform-origin: 0 50%;
+  animation: sj-grow var(--dur-bar) var(--ease-out) both;
+  transition: transform var(--dur-bar) var(--ease-out);
+}
+.bars-row:nth-of-type(2) .bars-track > div { animation-delay: 50ms; }
+.bars-row:nth-of-type(3) .bars-track > div { animation-delay: 100ms; }
+.bars-row:nth-of-type(n+4) .bars-track > div { animation-delay: 150ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel, .table-scroll, .redflag, .grid > .stat, .bubble-body { animation-name: sj-fade; }
+  .bars-track > div { animation: none; transition: none; }
+  button:active:not(:disabled) { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mat, .mat-rail { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .mat { background: var(--surface); }
+  .mat-rail { background: var(--surface2); }
+}
 
 /* ---------------------------------------------------------- app shell */
 
@@ -78,12 +141,17 @@ header.topbar {
   position: sticky;
   top: 0;
   height: 100vh;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface2) 86%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   padding: 14px 10px;
   gap: 16px;
+}
+@media (prefers-reduced-transparency: reduce) {
+  header.topbar { background: var(--surface2); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 header.topbar .brand {
   display: flex;
@@ -99,6 +167,7 @@ header.topbar .brand .mark {
   background: var(--acc); color: var(--accInk);
   display: flex; align-items: center; justify-content: center;
   font-family: var(--serif); font-size: 15px;
+  font-variation-settings: 'opsz' 14, 'wght' 600;
 }
 header.topbar nav { display: flex; flex-direction: column; gap: 2px; }
 header.topbar nav a {
@@ -126,6 +195,7 @@ h1 {
   font-weight: 400;
   line-height: 1.15;
   margin: 0 0 4px;
+  font-variation-settings: 'opsz' 48, 'wght' 400, 'SOFT' 0, 'WONK' 0;
 }
 h2 {
   font-size: 14px;
@@ -166,7 +236,7 @@ p.muted, .muted { color: var(--ink2); }
 .stat.tone-danger .n { color: var(--dan); }
 .stat.tone-warn { border-color: var(--mid); }
 .stat.tone-warn .n { color: var(--mid); }
-.stat .n { font-family: var(--serif); font-size: 32px; line-height: .95; }
+.stat .n { font-family: var(--serif); font-size: 32px; line-height: .95; font-variation-settings: 'opsz' 60, 'wght' 400; }
 .stat .k {
   color: var(--ink3);
   font-size: 11px;
@@ -189,13 +259,32 @@ p.muted, .muted { color: var(--ink2); }
 table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 13px; }
 th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th {
-  background: var(--surface2);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: color-mix(in srgb, var(--surface2) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   font-weight: 500;
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink3);
   white-space: nowrap;
+}
+th::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 12px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--ink) 7%, transparent), transparent);
+}
+@media (prefers-reduced-transparency: reduce) {
+  th { background: var(--surface2); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  th::after { display: none; }
 }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--surface2); }

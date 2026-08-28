@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'motion.dart';
+
 /// The Sanjeevani design system: colour tokens, spacing/radius scale and
 /// typography, lifted from the "Sanjeevani Patient App" design canvas.
 /// Two ink-on-surface palettes (light/dark), one accent (teal), one danger
@@ -43,39 +45,39 @@ class SanjeevaniColors extends ThemeExtension<SanjeevaniColors> {
   final Color stub;
 
   static const light = SanjeevaniColors(
-    canvas: Color(0xFFFAF0D9),
-    bg: Color(0xFFFDF6E6),
-    surface: Color(0xFFFFFCF4),
-    surface2: Color(0xFFF6EDD8),
-    ink: Color(0xFF1A3126),
-    ink2: Color(0xFF4C6056),
-    ink3: Color(0xFF63756C),
-    line: Color(0xFFDBE1CB),
-    acc: Color(0xFF31785E),
-    accSoft: Color(0xFFD1F9E6),
+    canvas: Color(0xFFE9ECEC),
+    bg: Color(0xFFF4F6F6),
+    surface: Color(0xFFFFFFFF),
+    surface2: Color(0xFFECEFF0),
+    ink: Color(0xFF13181A),
+    ink2: Color(0xFF576063),
+    ink3: Color(0xFF899093),
+    line: Color(0xFFDDE2E3),
+    acc: Color(0xFF357574),
+    accSoft: Color(0xFFDFF3F3),
     accInk: Color(0xFFFFFFFF),
-    dan: Color(0xFFB5242A),
-    danSoft: Color(0xFFFFE4E1),
-    mid: Color(0xFF906106),
-    stub: Color(0xFF73756C),
+    dan: Color(0xFFB63132),
+    danSoft: Color(0xFFFEE8E6),
+    mid: Color(0xFFA06F30),
+    stub: Color(0xFF8F9699),
   );
 
   static const dark = SanjeevaniColors(
-    canvas: Color(0xFF102119),
-    bg: Color(0xFF182B22),
-    surface: Color(0xFF22372D),
-    surface2: Color(0xFF2E4439),
-    ink: Color(0xFFFAF3E3),
-    ink2: Color(0xFFB8BEAA),
-    ink3: Color(0xFF93A495),
-    line: Color(0xFF3C5348),
-    acc: Color(0xFF87E0B7),
-    accSoft: Color(0xFF224A39),
-    accInk: Color(0xFF102119),
-    dan: Color(0xFFF87E77),
-    danSoft: Color(0xFF592624),
-    mid: Color(0xFFE3B86E),
-    stub: Color(0xFF8B938C),
+    canvas: Color(0xFF0A0D0D),
+    bg: Color(0xFF121617),
+    surface: Color(0xFF181D1E),
+    surface2: Color(0xFF212829),
+    ink: Color(0xFFEEF2F2),
+    ink2: Color(0xFFA8B2B4),
+    ink3: Color(0xFF7C8688),
+    line: Color(0xFF2B3334),
+    acc: Color(0xFF68B4B3),
+    accSoft: Color(0xFF0A3535),
+    accInk: Color(0xFF0A0D0D),
+    dan: Color(0xFFED756E),
+    danSoft: Color(0xFF4B1D1B),
+    mid: Color(0xFFE1AC6E),
+    stub: Color(0xFF6C7679),
   );
 
   @override
@@ -178,9 +180,9 @@ class UrgencyLevel {
 ThemeData _buildTheme(SanjeevaniColors c, Brightness brightness) {
   final base = brightness == Brightness.dark ? ThemeData.dark() : ThemeData.light();
   final textTheme = GoogleFonts.figtreeTextTheme(base.textTheme).copyWith(
-    displaySmall: GoogleFonts.instrumentSerif(fontSize: 38, height: 1.05, color: c.ink),
-    headlineMedium: GoogleFonts.instrumentSerif(fontSize: 30, height: 1.15, color: c.ink),
-    headlineSmall: GoogleFonts.instrumentSerif(fontSize: 26, height: 1.15, color: c.ink),
+    displaySmall: GoogleFonts.fraunces(fontSize: 38, height: 1.05, color: c.ink),
+    headlineMedium: GoogleFonts.fraunces(fontSize: 30, height: 1.15, color: c.ink),
+    headlineSmall: GoogleFonts.fraunces(fontSize: 26, height: 1.15, color: c.ink),
     titleLarge: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: c.ink),
     titleMedium: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.ink),
     titleSmall: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink),
@@ -229,6 +231,7 @@ ThemeData _buildTheme(SanjeevaniColors c, Brightness brightness) {
     scaffoldBackgroundColor: c.bg,
     textTheme: textTheme,
     extensions: [c],
+    pageTransitionsTheme: SanjeevaniMotion.pageTransitions,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: c.surface,
