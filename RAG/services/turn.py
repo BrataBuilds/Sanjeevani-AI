@@ -21,6 +21,38 @@ class TurnError(RuntimeError):
     """The agent could not be called, or answered with something unusable."""
 
 
+class PoisonedHistory(TurnError):
+    """The stored history has a function_call with no response after it.
+
+    Nothing in this session can succeed again: every turn replays the same broken
+    history and Gemini rejects it before the model is even reached. Recoverable
+    only by discarding that history and replaying the transcript onto a clean one
+    -- see the handler in api/routes/triage.py.
+    """
+
+
+# Gemini's wording for the dangling function_call. Matched on text because agno
+# surfaces it as a plain provider error with no code to switch on -- and mangles
+# the body it attaches (an uncalled ClientResponse.text bound method), so the
+# message is the only reliable signal left.
+_POISON_MARKER = "function call turn comes immediately after"
+
+
+def _is_poisoned(error: BaseException) -> bool:
+    return _POISON_MARKER in str(error)
+
+
+def _is_provider_failure(content: object) -> bool:
+    """The 'answer' is agno's error text, not the model's output.
+
+    agno builds that text from an uncalled ClientResponse.text, so what lands in
+    content is the repr of a bound method rather than the provider's message. The
+    real reason is only in agno's own log, which leaves the repr as the one thing
+    we can actually test for.
+    """
+    return isinstance(content, str) and "<bound method" in content
+
+
 async def _run_agent(session_id: str, turn_message: str) -> tuple[AgentTurn, str]:
     """One agent call, with whatever it returns coerced into an AgentTurn.
 
@@ -43,8 +75,16 @@ async def _run_agent(session_id: str, turn_message: str) -> tuple[AgentTurn, str
             else AgentTurn.model_validate(content)
         )
     except ValidationError as e:
+        # A provider failure does not come back as an exception: agno puts its own
+        # error text where the model's answer should be, and it fails to parse.
+        # That is a different problem from a model that answered badly, and needs
+        # a different answer -- see PoisonedHistory.
+        if _is_provider_failure(locals().get("content")) or _is_poisoned(e):
+            raise PoisonedHistory(f"Agent history rejected by the provider: {e}") from e
         raise TurnError(f"Agent returned an invalid triage response: {e}") from e
     except Exception as e:
+        if _is_poisoned(e):
+            raise PoisonedHistory(f"Agent history rejected by the provider: {e}") from e
         raise TurnError(f"Agent could not be called: {e}") from e
     return turn, session_id
 

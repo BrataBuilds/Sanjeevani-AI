@@ -15,9 +15,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from services.database import session_exists
+from services.database import forget_agent_history, session_exists
 from services.knowledge import check_symptoms
-from services.turn import TurnError, run_turn
+from services.turn import PoisonedHistory, TurnError, run_turn
 
 router = APIRouter()
 
@@ -195,6 +195,20 @@ async def triage(payload: TriageRequest) -> dict[str, Any]:
 
     try:
         turn, _session_id, _state = await run_turn(session_id, query)
+    except PoisonedHistory:
+        # The stored history can never be replayed again, so retrying it as-is
+        # would fail this turn and every turn after it. Drop that history and
+        # rebuild it from the patient's own transcript, which we still hold.
+        if not session_id:
+            raise
+        forget_agent_history(str(session_id))
+        replay = query_for(payload.conversation, session_is_new=True)
+        if not replay:
+            raise
+        try:
+            turn, _session_id, _state = await run_turn(session_id, replay)
+        except TurnError as e:
+            raise HTTPException(502, detail=str(e)) from e
     except TurnError as e:
         # The backend marks the request failed and tells the patient the assistant
         # is unavailable, rather than leaving them with silence.

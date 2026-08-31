@@ -20,6 +20,8 @@ import psycopg
 from psycopg import sql
 from dotenv import load_dotenv
 
+from config.config import settings
+
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
 
@@ -105,8 +107,35 @@ def session_exists(session_id: str)->bool:
     """Returns if a given chat session id exists or not"""
     with connection() as con:
         row = con.execute(
-            "SELECT 1 FROM sessions WHERE sessions_id = %s", (session_id,)).fetchone()   
+            "SELECT 1 FROM sessions WHERE sessions_id = %s", (session_id,)).fetchone()
         return row is not None
+
+
+def forget_agent_history(session_id: str) -> None:
+    """Drop the agent's stored history for a session, keeping the session itself.
+
+    A run that dies mid tool-use leaves a function_call with no response after it.
+    Gemini rejects any later replay of that history outright -- "Please ensure that
+    function call turn comes immediately after a user turn or after a function
+    response turn" -- so the session is not merely broken for one turn, it is
+    broken permanently. The session id is the platform's conversation id and comes
+    back on every turn, so a new id is not an option: the poisoned rows have to go.
+
+    Only the agent's own tables are touched. The patient's transcript lives in the
+    platform database and is replayed onto the fresh history by the caller, so
+    nothing the patient said is lost.
+    """
+    with connection() as con:
+        con.execute(
+            sql.SQL("DELETE FROM {} WHERE session_id = %s")
+            .format(sql.Identifier(settings.db_table + "_runs")), (session_id,))
+        con.execute(
+            sql.SQL("DELETE FROM {} WHERE session_id = %s")
+            .format(sql.Identifier(settings.db_table)), (session_id,))
+        # The interview restarts from the replayed transcript, so its counters
+        # must restart with it or the question floor is already spent.
+        con.execute("DELETE FROM session_state WHERE session_id = %s", (session_id,))
+        con.commit()
     
     
 
