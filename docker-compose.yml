@@ -98,6 +98,12 @@ services:
       AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
     ports:
       - "${RAG_PORT:-8000}:8000"
+    volumes:
+      # Chroma pulls an 80MB ONNX embedding model the first time it embeds. Its
+      # downloader reads 1KB at a time under httpx's default 5s read timeout, so
+      # on a slow link it fails startup outright, and without a cache it starts
+      # over on every recreate. Persist it so that download happens once.
+      - ragcache:/root/.cache/chroma
 
   web:
     build: ./web
@@ -113,3 +119,4 @@ services:
 
 volumes:
   pgdata:
+  ragcache:
