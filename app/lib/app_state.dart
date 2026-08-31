@@ -39,15 +39,34 @@ class AppState extends ChangeNotifier {
   String get language => (patient?['language'] as String?) ?? 'en';
 
   Future<void> boot() async {
+    // Before anything talks to the API: on Android the right host depends on
+    // whether this is an emulator or a real phone, which only the network knows.
+    await Api.resolveBaseUrl();
     await Api.instance.loadToken();
-    final methods = await Api.instance.authConfig();
-    googleEnabled = methods['google'] == true;
-    firebaseEnabled = methods['firebase'] == true;
+
+    // An unreachable server must not strand the app on the splash spinner.
+    // booting is only cleared at the end of this method, so anything that
+    // throws on the way there leaves the gate showing a progress indicator with
+    // no way out. Sign-in still works offline-ish: the login screen renders,
+    // and the attempt itself reports what is actually wrong.
+    try {
+      final methods = await Api.instance.authConfig();
+      googleEnabled = methods['google'] == true;
+      firebaseEnabled = methods['firebase'] == true;
+    } on ApiException catch (e) {
+      debugPrint('could not read auth config from ${Api.baseUrl}: ${e.message}');
+      googleEnabled = false;
+      firebaseEnabled = false;
+    }
+
     if (Api.instance.token != null) {
       try {
         await refresh();
-      } catch (_) {
-        await Api.instance.setToken(null);
+      } on ApiException catch (e) {
+        // Only the server rejecting the token means signed out. Dropping a
+        // valid session because the network was down would sign people out
+        // every time they opened the app on a bad connection.
+        if (e.status == 401 || e.status == 403) await Api.instance.setToken(null);
       }
     }
     if (googleEnabled && googleServerClientId.isNotEmpty) {
