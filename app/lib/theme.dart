@@ -255,6 +255,11 @@ ThemeData _buildTheme(SanjeevaniColors c, Brightness brightness) {
         borderSide: BorderSide(color: c.dan, width: 1.5),
       ),
     ),
+    // Size.fromHeight(h) means Size(double.infinity, h) — an infinite *minimum*
+    // width, which is how these buttons fill their column. It only works where
+    // width is bounded. Inside a Row, Wrap, or any unbounded parent it throws
+    // "BoxConstraints forces an infinite width" and takes down the whole
+    // subtree, so wrap the button in an Expanded or Flexible there.
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: c.acc,

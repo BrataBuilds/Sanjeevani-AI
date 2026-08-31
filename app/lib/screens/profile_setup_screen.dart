@@ -217,10 +217,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         borderRadius: SanjeevaniRadius.md,
                       ),
                 const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: _pickPhoto,
-                  icon: const Icon(Icons.photo_outlined),
-                  label: Text(_photoPath == null ? 'Add photo' : 'Change photo'),
+                // Expanded, not bare: the theme gives outlined buttons a
+                // Size.fromHeight minimum, which is an *infinite* minimum width.
+                // A Row offers unbounded width, so an unwrapped button asserts
+                // during layout and takes the whole form down with it.
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickPhoto,
+                    icon: const Icon(Icons.photo_outlined),
+                    label: Text(_photoPath == null ? 'Add photo' : 'Change photo'),
+                  ),
                 ),
               ],
             ),
