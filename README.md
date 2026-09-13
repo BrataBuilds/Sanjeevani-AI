@@ -1,6 +1,4 @@
 # Sanjeevani AI: a Smart Healthcare app
-## Brief overview
-Our SIH 2026 Submission
 Sanjeevani AI is an AI assisted health care app that streamlines the process of visiting hospitals. Users describe their problem to our chat assistant that boots up an agent, automatically creates an registration form, a preliminary clinical summary and shows the user a list of recommended hospitals. Based on user's choice, their report is forwarded to the respective facilities, and they are automatically assigned a doctor/department, enabling a seamless experience.
 ## Core Features 
 - **One-time profile setup** with a persistent patient ID, registration takes seconds.
@@ -33,12 +31,10 @@ Right now AI is only capable of making amateur level diagnosis, but falls apart 
 3. **Privacy focused**, no data is stored on external servers/shared with third parties without consent. Everything is stored locally.
 4. **Human in the loop enabled**, no false positives, ensure critical decisions are always made by a professional.
 ## Tech Stack
-- App : Flutter 
-- Dashboards Doctor/Hospital: Next JS
-- AI : Gemini API, groq, open router, pinecone/chroma db, agno / langchain, 
-- Backend: Dockerized Postgresql, Node, Google OAuth, Docker, Redis, GCP, cloudinary
--
-
+- App : Flutter Android
+- Dashboards Doctor and Hospital: Next JS
+- AI and RAG harness: FastAPI, Gemini API, Open Router, Chroma DB, Agno, 
+- Backend: Dockerized Postgresql, Node, Google OAuth, Docker, GCP
 ---
 
 # Repository
