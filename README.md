@@ -1,6 +1,7 @@
-# *Name in progress* SIH 2026 Submissions Smart Healthcare app
+# Sanjeevani AI: a Smart Healthcare app
 ## Brief overview
-*Name in progress* is an AI assisted health care app that streamlines the process of visiting hospitals. Users describe their problem to our chat assistant that boots up an agent, automatically creates an registration form, a preliminary clinical summary and shows the user a list of recommended hospitals. Based on user's choice, their report is forwarded to the respective facilities, and they are automatically assigned a doctor/department, enabling a seamless experience.
+Our SIH 2026 Submission
+Sanjeevani AI is an AI assisted health care app that streamlines the process of visiting hospitals. Users describe their problem to our chat assistant that boots up an agent, automatically creates an registration form, a preliminary clinical summary and shows the user a list of recommended hospitals. Based on user's choice, their report is forwarded to the respective facilities, and they are automatically assigned a doctor/department, enabling a seamless experience.
 ## Core Features 
 - **One-time profile setup** with a persistent patient ID, registration takes seconds.
 - **Easy Appointment booking** + **walk-in/emergency** registration
