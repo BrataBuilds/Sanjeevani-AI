@@ -58,8 +58,7 @@ start without it** — on every run path, not just in Docker. Generate one:
 node -e "console.log(crypto.randomBytes(32).toString('hex'))"
 ```
 
-Paste it into `.env`. Do the same for `AI_CALLBACK_SECRET` if you will connect a real
-AI service; left empty, every `/ai/*` call is rejected, which is the safe default.
+Paste it into `.env`.
 
 `.env` is gitignored. `.env.example` is the tracked template — keep them in step when you
 add a variable.
@@ -108,7 +107,7 @@ effect on restart.
 
 ```bash
 curl localhost:4000/health      # {"ok":true,"db":"up"}
-curl localhost:4000/ai/health   # {"triage_backend":"stub","callback_enabled":true}
+curl localhost:4000/ai/health   # {"triage_backend":"stub"}
 ```
 
 `"db":"up"` is the one that matters — it proves the backend reached Postgres.
@@ -357,10 +356,9 @@ creates its own tables on startup — `sessions`, `session_state`, `symptoms`, `
 — alongside the platform's 17. Reports are stored in `session_state.report`, not on
 the container filesystem, so they survive a restart.
 
-The endpoint the backend calls is `POST /triage` in `RAG/api/routes/triage.py`. It is a
-translator only: it hands the newest patient message to the agent and maps the answer
-onto the platform's contract, including converting the service's 0–100 urgency score to
-the platform's ESI 1–5. Request and response shapes are in
+The endpoint the backend calls is `POST /chat` in `RAG/api/routes/chat.py`. It sends one
+patient message and session ID to the agent and returns the chat response directly.
+Request and response shapes are in
 [AI Integration Contract](https://github.com/BrataBuilds/SIH2026-Smart-Health-App/wiki/AI-Integration-Contract).
 
 ---

@@ -1,11 +1,12 @@
 """
-One triage turn, shared by both entry points.
+One chat turn.
 
-`/chat` is this service's own conversational API. `/triage` is the contract the
-platform backend calls (docs/AI-Integration-Contract.md). They differ only in
-request and response shape, so the agent call, the server-side urgency
-recalculation, and the session bookkeeping live here rather than in either route.
+The backend forwards each patient message to `/chat`; the agent call, server-side
+urgency recalculation, and session bookkeeping stay in this single path.
 """
+import asyncio
+import json
+import re
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ import services.report as report
 from schemas.triage import AgentTurn
 from services.chat_agent import get_agent
 from services.knowledge import check_symptoms
+from services.vector_db import query_symptoms
 
 
 class TurnError(RuntimeError):
@@ -27,7 +29,7 @@ class PoisonedHistory(TurnError):
     Nothing in this session can succeed again: every turn replays the same broken
     history and Gemini rejects it before the model is even reached. Recoverable
     only by discarding that history and replaying the transcript onto a clean one
-    -- see the handler in api/routes/triage.py.
+    The chat client can retry after starting a new session.
     """
 
 
@@ -53,6 +55,65 @@ def _is_provider_failure(content: object) -> bool:
     return isinstance(content, str) and "<bound method" in content
 
 
+def _is_rate_limited(error: BaseException, content: object = None) -> bool:
+    text = f"{error} {content}".casefold()
+    return any(marker in text for marker in ("429", "resource_exhausted", "quota exceeded"))
+
+
+def _normalise_model_json(content: str) -> str:
+    """Coerce Gemma's compact MCQ string into the AgentTurn shape."""
+    payload = json.loads(content)
+    for field in ("running_urgency_score",):
+        value = payload.get(field)
+        if isinstance(value, (int, float)):
+            payload[field] = max(0, min(100, value))
+    if isinstance(payload.get("report"), dict):
+        report_payload = payload["report"]
+        score = payload.get("running_urgency_score", 0)
+        report_payload.setdefault("symptoms_described", payload.get("identified_symptoms") or ["unspecified symptoms"])
+        report_payload.setdefault("urgency_score", score)
+        report_payload.setdefault("urgency_breakdown", [score])
+        report_payload.setdefault("recommended_specialty", "general_medicine")
+        report_payload.setdefault("possible_diagnosis", None)
+        report_payload.setdefault("confidence_score", None)
+        report_payload.setdefault("rationale", report_payload.get("summary"))
+        value = report_payload.get("urgency_score")
+        if isinstance(value, (int, float)):
+            report_payload["urgency_score"] = max(0, min(100, value))
+    elif isinstance(payload.get("report"), str):
+        score = payload.get("running_urgency_score", 0)
+        payload["report"] = {
+            "symptoms_described": payload.get("identified_symptoms") or ["unspecified symptoms"],
+            "urgency_score": score,
+            "urgency_breakdown": [score],
+            "recommended_specialty": "general_medicine",
+            "possible_diagnosis": None,
+            "confidence_score": None,
+            "rationale": payload["report"].strip(),
+        }
+    follow_up = payload.get("follow_up")
+    if isinstance(follow_up, str):
+        option_start = re.search(r"\bA\)\s*", follow_up)
+        options = [match.group(2).strip(" ,") for match in re.finditer(
+            r"(?<!\w)([A-E])\)\s*(.*?)(?=\s+[A-E]\)\s*|,\s*[A-E]\)\s*|$)",
+            follow_up,
+        )]
+        if option_start and len(options) >= 2:
+            question = follow_up[:option_start.start()].strip()
+            payload["follow_up"] = {"question": question, "options": options}
+    return json.dumps(payload)
+
+
+def _hospital_context(hospitals: list[dict]) -> str:
+    if not hospitals:
+        return "No hospital directory was supplied."
+    return "\n".join(
+        f"- {hospital.get('name')} (id={hospital.get('id')}, distance_km={hospital.get('distance_km')}, "
+        f"specialties={', '.join(hospital.get('specialties') or [])})"
+        for hospital in hospitals
+    )
+
+
 async def _run_agent(session_id: str, turn_message: str) -> tuple[AgentTurn, str]:
     """One agent call, with whatever it returns coerced into an AgentTurn.
 
@@ -65,24 +126,32 @@ async def _run_agent(session_id: str, turn_message: str) -> tuple[AgentTurn, str
     """
     try:
         agent, session_id = await get_agent(session_id=session_id)
-        run_response = await agent.arun(turn_message)
+        run_response = await asyncio.wait_for(agent.arun(turn_message), timeout=15)
         content = run_response.content
         turn = (
             content
             if isinstance(content, AgentTurn)
-            else AgentTurn.model_validate_json(content)
+            else AgentTurn.model_validate_json(_normalise_model_json(content))
             if isinstance(content, str)
             else AgentTurn.model_validate(content)
         )
+    except asyncio.TimeoutError as e:
+        raise TurnError("AI provider timed out; retry later.") from e
     except ValidationError as e:
         # A provider failure does not come back as an exception: agno puts its own
         # error text where the model's answer should be, and it fails to parse.
         # That is a different problem from a model that answered badly, and needs
         # a different answer -- see PoisonedHistory.
-        if _is_provider_failure(locals().get("content")) or _is_poisoned(e):
+        if _is_rate_limited(e, locals().get("content")):
+            raise TurnError("AI provider quota is exhausted; retry after the quota resets.") from e
+        if _is_provider_failure(locals().get("content")):
+            raise TurnError("AI provider did not return a usable response; retry later.") from e
+        if _is_poisoned(e):
             raise PoisonedHistory(f"Agent history rejected by the provider: {e}") from e
         raise TurnError(f"Agent returned an invalid triage response: {e}") from e
     except Exception as e:
+        if _is_rate_limited(e):
+            raise TurnError("AI provider quota is exhausted; retry after the quota resets.") from e
         if _is_poisoned(e):
             raise PoisonedHistory(f"Agent history rejected by the provider: {e}") from e
         raise TurnError(f"Agent could not be called: {e}") from e
@@ -97,7 +166,11 @@ def _missing_payload(turn: AgentTurn) -> bool:
     )
 
 
-async def run_turn(session_id: str | None, user_query: str) -> tuple[AgentTurn, str, dict]:
+async def run_turn(
+    session_id: str | None,
+    user_query: str,
+    hospitals: list[dict] | None = None,
+) -> tuple[AgentTurn, str, dict]:
     """Advance one session by one patient message.
 
     Returns the agent's turn, the session id it ran under, and the session state
@@ -112,6 +185,8 @@ async def run_turn(session_id: str | None, user_query: str) -> tuple[AgentTurn, 
     force = report.force_report(state, user_query)
     keep_asking = report.must_keep_asking(state, user_query)
     turn_message = report.build_turn_message(user_query, state, force, keep_asking)
+    turn_message += "\n\nSymptom knowledge-base context:\n" + query_symptoms(user_query)
+    turn_message += "\n\nHospital directory:\n" + _hospital_context(hospitals or [])
 
     turn, session_id = await _run_agent(session_id, turn_message)
 

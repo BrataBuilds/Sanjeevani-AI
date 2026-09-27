@@ -4,10 +4,9 @@
  * a queue entry. All triage *decisions* come from the AI side; this file only
  * stores and presents them.
  */
-import { many, one, query, tx } from './db.js';
-import { ageFrom } from './http.js';
+import { one, query, tx } from './db.js';
 import { audit } from './audit.js';
-import { normaliseTriage, requestTriage } from './ai.js';
+import { normaliseTriage, requestChat } from './ai.js';
 
 const R = 6371; // km
 export function distanceKm(a, b) {
@@ -21,59 +20,39 @@ export function distanceKm(a, b) {
   return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 10) / 10;
 }
 
-/** Hospitals with their specialties, sorted by distance from the patient. */
-export async function hospitalsNear(patient) {
-  const rows = await many(
-    `select h.id, h.name, h.address, h.city, h.phone, h.lat, h.lng,
-            coalesce(array_agg(d.specialty) filter (where d.specialty is not null), '{}') as specialties
-       from hospitals h
-       left join departments d on d.hospital_id = h.id
-      group by h.id
-      order by h.name`,
-  );
-  return rows
-    .map((h) => ({ ...h, distance_km: distanceKm(patient, h) }))
-    .sort((a, b) => (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9));
-}
-
-async function buildPayload(requestId, conversationId, patientId) {
-  const patient = await one(
-    `select p.*, u.full_name, u.email from patients p
-       join users u on u.id = p.user_id where p.user_id = $1`,
-    [patientId],
-  );
-  const conditions = await many(
-    'select kind, label, notes from patient_conditions where patient_id = $1',
-    [patientId],
-  );
-  const messages = await many(
-    `select sender_role as role, kind, body, payload, file_id, created_at
-       from messages where conversation_id = $1 order by created_at`,
+async function buildPayload(requestId, conversationId) {
+  const [message, patient, hospitals] = await Promise.all([
+    one(
+    `select body from messages
+      where conversation_id = $1 and sender_role = 'patient'
+        and body is not null and btrim(body) <> ''
+      order by created_at desc limit 1`,
     [conversationId],
-  );
-  const hospitals = await hospitalsNear(patient);
+    ),
+    one('select lat, lng from patients where user_id = (select patient_id from conversations where id = $1)', [conversationId]),
+    query(
+      `select h.id, h.name, h.lat, h.lng,
+              coalesce(array_agg(d.specialty order by d.specialty) filter (where d.id is not null), '{}') as specialties
+         from hospitals h left join departments d on d.hospital_id = h.id
+        group by h.id order by h.name`,
+      [],
+    ),
+  ]);
+  if (!message) throw new Error('conversation has no patient message');
+
+  const withDistance = hospitals.rows.map((hospital) => ({
+    id: hospital.id,
+    name: hospital.name,
+    distance_km: distanceKm(patient, hospital),
+    specialties: hospital.specialties,
+  }));
+  withDistance.sort((a, b) => (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9));
 
   return {
     request_id: requestId,
-    // Where an async service should POST its answer.
-    callback_url: `${(process.env.PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '')}/ai/triage-callback`,
-    language: patient.language,
-    patient: {
-      id: patient.user_id,
-      age: ageFrom(patient.dob),
-      gender: patient.gender,
-      blood_type: patient.blood_type,
-      known_conditions: conditions,
-      location: { lat: patient.lat, lng: patient.lng },
-    },
-    conversation: { id: conversationId, messages },
-    // Attachments are referenced, not inlined — GET /files/:id with a service token.
-    attachments: messages
-      .filter((m) => m.file_id)
-      .map((m) => ({ file_id: m.file_id, kind: m.kind, url: `/files/${m.file_id}` })),
-    hospitals: hospitals.map(({ id, name, specialties, lat, lng, distance_km }) => ({
-      id, name, specialties, lat, lng, distance_km,
-    })),
+    session_id: conversationId,
+    user_query: message.body,
+    hospitals: withDistance,
   };
 }
 
@@ -85,13 +64,16 @@ async function buildPayload(requestId, conversationId, patientId) {
 export async function runTriage({ conversationId, patientId }) {
   const req = await one(
     `insert into triage_requests (conversation_id, patient_id, request)
-     values ($1, $2, '{}'::jsonb) returning id`,
+     values ($1, $2, '{}'::jsonb)
+     on conflict (conversation_id) where status = 'pending' do nothing
+     returning id`,
     [conversationId, patientId],
   );
+  if (!req) return { pending: true, duplicate: true };
 
   let payload;
   try {
-    payload = await buildPayload(req.id, conversationId, patientId);
+    payload = await buildPayload(req.id, conversationId);
     await query('update triage_requests set request = $2 where id = $1', [
       req.id,
       JSON.stringify(payload),
@@ -102,7 +84,7 @@ export async function runTriage({ conversationId, patientId }) {
   }
 
   try {
-    const { source, pending, result } = await requestTriage(payload);
+    const { source, pending, result } = await requestChat(payload);
     await query('update triage_requests set source = $2 where id = $1', [req.id, source]);
     if (pending) return { requestId: req.id, pending: true };
     await applyTriageResult(req.id, result);
@@ -155,8 +137,7 @@ const insertMessage = (q, conversationId, m) =>
   );
 
 /**
- * Persist an AI answer and fan it out into the chat. Called both from runTriage
- * (synchronous path) and from POST /ai/triage-callback (asynchronous path).
+ * Persist a chat answer and fan it out into the platform conversation.
  */
 export async function applyTriageResult(requestId, rawResult) {
   const req = await one(
@@ -324,8 +305,17 @@ async function createVisit(client, { patientId, specialty, urgency, triageResult
   if (!all.length) return null;
 
   const nearest = [...all].sort((a, b) => (a.distance_km ?? 1e9) - (b.distance_km ?? 1e9))[0];
+  const suggestedDepartment = suggestedId
+    ? await client.query(
+      `select 1 from departments
+        where hospital_id = $1 and specialty = any($2::text[]) limit 1`,
+      [suggestedId, [specialty, 'general_medicine'].filter(Boolean)],
+    )
+    : { rows: [] };
   const hospital =
-    all.find((h) => h.id === suggestedId) || all.find((h) => h.id === preferred) || nearest;
+    (suggestedDepartment.rows.length ? all.find((h) => h.id === suggestedId) : null) ||
+    all.find((h) => h.id === preferred) ||
+    nearest;
 
   const dept = (
     await client.query(

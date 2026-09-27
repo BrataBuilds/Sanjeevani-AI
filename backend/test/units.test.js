@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normaliseTriage } from '../src/lib/ai.js';
+import { chatPrompt, normaliseChatResponse, normaliseTriage } from '../src/lib/ai.js';
 import { distanceKm } from '../src/lib/triage.js';
 import { ageFrom, bool, enumOf, num, str, uuid, email } from '../src/lib/http.js';
 
@@ -48,6 +48,46 @@ test('normaliseTriage survives garbage input', () => {
     assert.equal(t.red_flag, false);
     assert.equal(t.urgency, null);
   }
+});
+
+test('the AI boundary sends only the deterministic chat request shape', () => {
+  assert.deepEqual(
+    chatPrompt({
+      request_id: 'request-1',
+      session_id: '11111111-1111-1111-1111-111111111111',
+      user_query: ' It started this morning. ',
+    }),
+    {
+      session_id: '11111111-1111-1111-1111-111111111111',
+      user_query: 'It started this morning.',
+      hospitals: [],
+    },
+  );
+});
+
+test('a chat response becomes the existing persistence contract without triage orchestration', () => {
+  assert.deepEqual(
+    normaliseChatResponse(
+      {
+        session_id: '11111111-1111-1111-1111-111111111111',
+        response_type: 'mcq',
+        content: { question: 'How severe is it?', options: ['Mild', 'Severe'] },
+      },
+      'request-1',
+    ),
+    {
+      request_id: 'request-1',
+      status: 'needs_more_info',
+      reply: 'How severe is it?',
+      follow_up_questions: [
+        { id: 'q1', question: 'How severe is it?', options: ['Mild', 'Severe'], multi: false },
+      ],
+    },
+  );
+  assert.deepEqual(
+    normaliseChatResponse({ response_type: 'text', content: 'Your report is ready.' }, 'request-2'),
+    { request_id: 'request-2', status: 'ok', reply: 'Your report is ready.' },
+  );
 });
 
 test('distanceKm measures and refuses incomplete coordinates', () => {

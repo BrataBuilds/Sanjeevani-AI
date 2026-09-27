@@ -101,7 +101,8 @@ router.get('/visits', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
 
   res.json(await many(
-    `select v.id, v.token_no, v.token_date, v.status, v.urgency, v.urgency_overridden,
+        `select v.id, v.token_no, v.token_date, v.status, v.urgency, v.urgency_overridden,
+          v.department_id, v.doctor_user_id,
             v.reason, v.created_at, v.updated_at,
             u.full_name as patient_name, p.dob,
             dep.name as department_name, du.full_name as doctor_name,
@@ -117,6 +118,35 @@ router.get('/visits', async (req, res) => {
       limit $3`,
     [hospitalId, status, limit],
   ).then((rows) => rows.map((r) => ({ ...r, age: ageFrom(r.dob), dob: undefined }))));
+});
+
+router.patch('/visits/:id/assignment', async (req, res) => {
+  const hospitalId = await staffHospitalId(req.user);
+  const visitId = uuid(req.params.id, 'visit id');
+  const departmentId = req.body?.department_id === null
+    ? null
+    : uuid(req.body?.department_id, 'department_id');
+  const doctorId = req.body?.doctor_user_id === null
+    ? null
+    : uuid(req.body?.doctor_user_id, 'doctor_user_id');
+
+  const visit = await one('select id from visits where id = $1 and hospital_id = $2', [visitId, hospitalId]);
+  if (!visit) throw notFound('visit at your hospital');
+  if (!await one('select id from departments where id = $1 and hospital_id = $2', [departmentId, hospitalId]))
+    throw notFound('department at your hospital');
+  if (!await one(
+    `select user_id from doctors where user_id = $1 and hospital_id = $2 and department_id = $3`,
+    [doctorId, hospitalId, departmentId],
+  )) throw notFound('doctor in that department at your hospital');
+
+  const updated = await one(
+    `update visits set department_id = $3, doctor_user_id = $4, updated_at = now()
+      where id = $1 and hospital_id = $2 returning *`,
+    [visitId, hospitalId, departmentId, doctorId],
+  );
+  audit(req.user.id, 'visit.assignment_updated', 'visit', visitId,
+    { department_id: departmentId, doctor_user_id: doctorId }, hospitalId);
+  res.json(updated);
 });
 
 // ------------------------------------------------------------ departments

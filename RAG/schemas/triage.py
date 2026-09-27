@@ -16,6 +16,7 @@ class PreliminaryReport(BaseModel):
     urgency_score: float = Field(ge=0, le=100)
     urgency_breakdown: list[float] = Field(min_length=1, max_length=20)
     recommended_specialty: str = Field(min_length=1, max_length=100)
+    recommended_hospital_id: str | None = None
     possible_diagnosis: list[str] | None = None
     confidence_score: float | None = Field(default=None, ge=0, le=1)
     rationale: str | None = None
@@ -25,5 +26,5 @@ class AgentTurn(BaseModel):
     action: Literal["ask_question", "generate_report"]
     running_urgency_score: float = Field(ge=0, le=100)
     identified_symptoms: list[str] = Field(default_factory=list, max_length=20)
-    follow_up: MCQOptions | None = None
+    follow_up: MCQOptions | str | None = None
     report: PreliminaryReport | None = None

@@ -9,6 +9,7 @@ dependencies = [
     "chromadb>=1.5.9",
     "fastapi[standard]>=0.141.1",
     "google-genai>=2.20.0",
+    "psycopg2-binary>=2.9.13",
     "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.0",
     "sentence-transformers>=6.0.0",

@@ -46,7 +46,6 @@ services:
       # it is not hardcoded here.
       AI_SERVICE_URL: ${AI_SERVICE_URL:-}
       AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-}
-      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
       # The first hospital administrator, reconciled on every boot. See .env.example.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
@@ -92,10 +91,9 @@ services:
       GEMINI_API: ${GEMINI_API:-}
       # The same dockerized Postgres the platform uses. RAG creates its own tables
       # (sessions, session_state, symptoms, doctors) at startup via knowledge.initialize().
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemma-4-31b-it}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
       DB_URL: postgresql+psycopg://${POSTGRES_USER:-sanjeevani}:${POSTGRES_PASSWORD:-sanjeevani}@db:5432/${POSTGRES_DB:-sanjeevani}
       PUBLIC_API_URL: http://backend:4000
-      AI_CALLBACK_SECRET: ${AI_CALLBACK_SECRET:-}
     ports:
       - "${RAG_PORT:-8000}:8000"
     volumes:

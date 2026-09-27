@@ -47,8 +47,7 @@ graph TB
     APP -.->|"sign in"| EXT
     API -.->|"verify ID token"| EXT
 
-    SEAM -->|"POST /triage"| RAG
-    RAG -->|"POST /ai/triage-callback<br/>(async path, x-ai-secret)"| API
+    SEAM -->|"POST /chat"| RAG
     RAG --> GEM
 
     API --> PUB
@@ -69,7 +68,7 @@ graph TB
 
 | Boundary | Rule |
 |---|---|
-| AI seam | The backend never decides a specialty, an urgency or a red flag. It builds a payload, stores what comes back, and renders it. All reasoning is behind `POST /triage`. |
+| AI seam | The backend never decides a specialty, an urgency or a red flag. It sends one message to `POST /chat`, stores what comes back, and renders it. |
 | Postgres schemas | The triage service shares the database but owns the `rag` schema. It reads `departments.specialty` and writes nothing to `public`. |
 | Staff accounts | Never self-signup. An admin authorises the address; the first admin comes from `ADMIN_*` env. |
 | Files | Stored as `bytea` in Postgres, served through `/files/:id` behind auth. No object store. |
@@ -110,15 +109,14 @@ sequenceDiagram
     P->>A: "severe chest pain, short of breath"
     A->>B: POST /:id/messages
     B->>D: triage_requests (pending)
-    B->>R: POST /triage — transcript, profile, hospitals
-    note right of R: first turn replays the intake too
+    B->>R: POST /chat — session_id, user_query
     R->>R: symptoms → urgency (0-100) → ESI 1-5
     R-->>B: needs_more_info + one MCQ
     B->>D: messages (mcq)
     loop until the question floor is cleared
         P->>A: answers
         A->>B: POST /:id/mcq-answer
-        B->>R: POST /triage
+        B->>R: POST /chat
         R-->>B: another question
     end
     R-->>B: ok — complaint, symptoms, specialty, ESI, sources

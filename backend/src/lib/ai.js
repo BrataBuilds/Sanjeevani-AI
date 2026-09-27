@@ -1,20 +1,8 @@
 /**
- * The AI / RAG seam. THIS FILE IS THE BOUNDARY, NOT THE IMPLEMENTATION.
- *
- * Another team owns triage: entity extraction, the red-flag rule engine, the
- * vector search, and report synthesis (Design_doc.md §5). Nothing in this repo
- * decides a specialty, an urgency score, or whether something is an emergency.
- *
- * Two ways for that team to plug in — both speak the same JSON contract, which
- * is documented in docs/AI-Integration-Contract.md:
- *
- *   1. Synchronous  — set AI_SERVICE_URL. We POST {AI_SERVICE_URL}/triage and
- *                     use the response body directly.
- *   2. Asynchronous — the same POST may answer 202 with no result; the service
- *                     later calls POST /ai/triage-callback with `request_id`.
- *
- * With AI_SERVICE_URL unset, stubTriage() returns obviously-canned placeholder
- * data so the app and dashboards are fully demoable with no AI service running.
+ * The AI / RAG boundary. The platform sends exactly one patient message to the
+ * RAG service's /chat endpoint and translates its small response into the
+ * existing persistence shape. It deliberately does not reconstruct a second
+ * triage protocol from the transcript.
  */
 
 const URL_BASE = (process.env.AI_SERVICE_URL || '').replace(/\/$/, '');
@@ -22,6 +10,79 @@ const TOKEN = process.env.AI_SERVICE_TOKEN || '';
 const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 20000);
 
 export const aiConfigured = () => Boolean(URL_BASE);
+
+/** The one deterministic request shape accepted by RAG's /chat route. */
+export function chatPrompt(payload) {
+  if (typeof payload?.user_query !== 'string' || !payload.user_query.trim()) {
+    throw new Error('AI chat request has no patient message');
+  }
+
+  return {
+    ...(payload.session_id ? { session_id: String(payload.session_id) } : {}),
+    user_query: payload.user_query.trim(),
+    hospitals: Array.isArray(payload.hospitals) ? payload.hospitals : [],
+  };
+}
+
+/** Convert the /chat response at one boundary; nothing else needs its shape. */
+export function normaliseChatResponse(raw, requestId, requestHospitals = []) {
+  if (!raw || typeof raw !== 'object') throw new Error('AI chat returned an invalid response');
+
+  if (raw.response_type === 'mcq' && raw.content && typeof raw.content === 'object') {
+    const { question, options } = raw.content;
+    if (typeof question !== 'string' || !question.trim() || !Array.isArray(options)) {
+      throw new Error('AI chat returned an invalid multiple-choice question');
+    }
+    return {
+      request_id: requestId,
+      status: 'needs_more_info',
+      reply: question,
+      follow_up_questions: [{ id: 'q1', question, options, multi: false }],
+    };
+  }
+
+  if (raw.response_type === 'text' && typeof raw.content === 'string' && raw.content.trim()) {
+    const result = { request_id: requestId, status: 'ok', reply: raw.content };
+    if (raw.report && typeof raw.report === 'object') {
+      const score = Number(raw.urgency_score ?? raw.report.urgency_score);
+      const urgency = Number.isFinite(score)
+        ? score >= 80 ? 1 : score >= 60 ? 2 : score >= 40 ? 3 : score >= 20 ? 4 : 5
+        : null;
+      const symptoms = Array.isArray(raw.report.symptoms_described)
+        ? raw.report.symptoms_described.map((name) => ({ name }))
+        : [];
+      result.chief_complaint = raw.report.symptoms_described?.slice(0, 3).join(', ') || null;
+      result.symptoms = symptoms;
+      result.specialty = typeof raw.report.recommended_specialty === 'string'
+        ? raw.report.recommended_specialty.toLowerCase().trim().replace(/\s+/g, '_')
+        : null;
+      if (typeof raw.report.recommended_hospital_id === 'string') {
+        const hospital = requestHospitals.find((item) => item.id === raw.report.recommended_hospital_id);
+        if (hospital) {
+          result.suggested_hospitals = [{
+            hospital_id: hospital.id,
+            name: hospital.name,
+            distance_km: hospital.distance_km ?? null,
+            reason: result.specialty
+              ? `Has a ${result.specialty.replace(/_/g, ' ')} department.`
+              : 'Selected by the triage assistant.',
+          }];
+        }
+      }
+      result.urgency = urgency;
+      result.red_flag = false;
+      result.summary = raw.report.rationale || null;
+      result.clinical_note = Array.isArray(raw.report.possible_diagnosis)
+        ? raw.report.possible_diagnosis.join('; ')
+        : null;
+      result.confidence = raw.report.confidence_score ?? null;
+      result.sources = [];
+    }
+    return result;
+  }
+
+  throw new Error('AI chat returned an unknown response type');
+}
 
 // stubTriage() returns invented symptoms, an invented specialty and an invented
 // urgency. It is labelled placeholder text in a demo; in front of real patients
@@ -38,25 +99,28 @@ if (!URL_BASE && process.env.NODE_ENV === 'production') {
  * @returns {Promise<{source:'stub'|'http', pending:boolean, result:object|null}>}
  *   pending=true means "accepted, answer will arrive on the callback".
  */
-export async function requestTriage(payload) {
+export async function requestChat(payload) {
   if (!URL_BASE) return { source: 'stub', pending: false, result: stubTriage(payload) };
 
-  const res = await fetch(`${URL_BASE}/triage`, {
+  const res = await fetch(`${URL_BASE}/chat`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(chatPrompt(payload)),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
-  if (res.status === 202) return { source: 'http', pending: true, result: null };
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`ai service ${res.status}: ${text.slice(0, 300)}`);
   }
-  return { source: 'http', pending: false, result: await res.json() };
+  return {
+    source: 'http',
+    pending: false,
+    result: normaliseChatResponse(await res.json(), payload?.request_id, payload?.hospitals),
+  };
 }
 
 /**

@@ -119,15 +119,14 @@ function VisitDetail() {
       )}
       {isPlaceholder && (
         <p className="notice">
-          This report came from the placeholder triage stub — no triage service is connected yet,
-          so the specialty and urgency below are sample values.
+          Reported Symptoms are AI generated, AI can mistakes, to confirm the given data you can additionally chat with the patient, or directly call them in.
         </p>
       )}
       {error && <p className="error">{error}</p>}
 
-      {d.visit.status === 'pending_review' && (
+      {['pending_review', 'chat'].includes(d.visit.status) && (
         <div className="panel decision">
-          <h2>Does this patient need to come in?</h2>
+          <h2>{d.visit.status === 'chat' ? 'Reconsider this patient' : 'Does this patient need to come in?'}</h2>
           <p className="small muted" style={{ margin: 0 }}>
             Read the report below first. A token is only issued if you call them in — answering
             here instead keeps them out of the physical queue. Anything in Notes is saved with

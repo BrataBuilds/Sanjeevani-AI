@@ -172,13 +172,15 @@ create table triage_requests (
   status          text not null default 'pending'
                   check (status in ('pending','done','failed')),
   source          text not null default 'stub'
-                  check (source in ('stub','http','callback')),
+                  check (source in ('stub','http')),
   request         jsonb not null,
   error           text,
   created_at      timestamptz not null default now(),
   completed_at    timestamptz
 );
 create index triage_requests_status_idx on triage_requests(status, created_at);
+create unique index triage_requests_one_pending_idx
+  on triage_requests(conversation_id) where status = 'pending';
 
 create table triage_results (
   id                  uuid primary key default gen_random_uuid(),

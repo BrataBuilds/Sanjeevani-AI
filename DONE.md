@@ -38,7 +38,7 @@
   | Hospitals | List with live queue length and specialty keys, distance sort, detail with departments |
   | Doctor | Queue (3 scopes, urgency-ordered), full pre-consult visit detail, urgency override + status transitions + notes, open a care-team thread |
   | Admin | Flow analytics over a configurable window, visit list, department create/list, doctor provisioning and duty/account toggles, audit trail |
-  | AI seam | `/ai/health`, `/ai/triage-callback`, `/ai/pending`, `/ai/requests/:id` |
+  | AI seam | `/ai/health`; backend-to-RAG `POST /chat` |
 
   Cross-cutting: `HttpError` → JSON error handler, Postgres constraint violations mapped
   to 4xx, CORS origin allowlist (native clients allowed), 10 MB upload cap with a mime
@@ -83,9 +83,9 @@
     `stub://no-model-connected` source, banner on the doctor's page), so the whole stack
     is demoable with no model.
   - Set → the backend POSTs the full transcript, patient profile, known conditions,
-    referenced attachments, and a distance-sorted hospital list to `{URL}/triage`.
-  - Three modes: synchronous, async callback (`POST /ai/triage-callback`), worker pull
-    (`GET /ai/pending`). Callbacks are idempotent.
+    the current patient message and session ID to `{URL}/chat`.
+  - One synchronous mode: backend sends each patient message to the RAG service's
+    `POST /chat` endpoint.
   - Results become chat messages (reply, MCQs, report, hospital suggestions), a `visits`
     queue row, and an audit entry — in one transaction.
 
@@ -189,7 +189,7 @@
   Full list in the Security and Compliance wiki page. The non-negotiable ones:
 
   - TLS everywhere; remove the debug cleartext and `NSAllowsLocalNetworking`.
-  - Real `JWT_SECRET`, `AI_CALLBACK_SECRET`, `POSTGRES_PASSWORD` from a secret store.
+  - Real `JWT_SECRET` and `POSTGRES_PASSWORD` from a secret store.
   - Postgres not publicly reachable; encryption at rest.
   - Rate limiting on auth and upload routes — there is none.
   - Consent capture, purpose statement, withdrawal, retention (DPDP Act, 2023).

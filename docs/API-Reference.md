@@ -21,7 +21,7 @@ Errors are always `{ "error": "message", "details": … }`. Status codes:
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/health` | — | `{ok, db}`. 503 if Postgres is unreachable. |
-| GET | `/ai/health` | — | `{triage_backend: "stub"\|"http", callback_enabled}`. |
+| GET | `/ai/health` | — | `{triage_backend: "stub"\|"http"}`. |
 
 ## Auth — `/auth`
 
@@ -111,16 +111,10 @@ All scoped to the admin's own hospital.
 | PATCH | `/admin/doctors/:id` | `{department_id?, is_available?, is_active?}`. |
 | GET | `/admin/audit?limit=` | Recent audit entries with actor and detail, **scoped to the caller's hospital**. Entries that belong to no hospital (a patient registering or editing their own profile) are never listed. |
 
-## AI seam — `/ai`
+## AI service
 
-Authenticated with `x-ai-secret` (compared with `timingSafeEqual`), not a JWT.
+The backend calls the RAG service synchronously with the single `/chat` contract.
 Full contract: [AI Integration Contract](AI-Integration-Contract).
-
-| Method | Path | Notes |
-|---|---|---|
-| POST | `/ai/triage-callback` | `{request_id, …result}` or `{request_id, error}`. Idempotent — replaying a done request is a no-op. |
-| GET | `/ai/pending?limit=` | Queued triage requests, for a worker that polls instead of receiving. |
-| GET | `/ai/requests/:id` | The stored request and whether a result exists. |
 
 ---
 

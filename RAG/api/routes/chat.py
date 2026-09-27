@@ -13,12 +13,16 @@ router = APIRouter()
 async def chat(prompt: UserPrompt):
     try:
         turn, session_id, _state = await run_turn(
-            str(prompt.session_id) if prompt.session_id else None, prompt.user_query,
+            str(prompt.session_id) if prompt.session_id else None,
+            prompt.user_query,
+            prompt.hospitals,
         )
     except TurnError as e:
         raise HTTPException(502, detail=str(e)) from e
 
-    if turn.action == "ask_question":
+    if turn.action == "ask_question" and isinstance(turn.follow_up, str):
+        response_type, content = "text", turn.follow_up
+    elif turn.action == "ask_question":
         response_type, content = "mcq", turn.follow_up
     else:
         response_type = "text"
@@ -32,6 +36,9 @@ async def chat(prompt: UserPrompt):
         timestamp=datetime.now(timezone.utc),
         response_type=response_type,
         content=content,
+        report=turn.report,
+        identified_symptoms=turn.identified_symptoms,
+        urgency_score=turn.running_urgency_score,
     )
 
 

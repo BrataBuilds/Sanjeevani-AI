@@ -16,11 +16,11 @@ flowchart TB
     DOC["/doctor<br/>queue, report, override"]
     ADM["/admin<br/>analytics, staff, audit"]
     FILES["/files/:id<br/>authorised bytes"]
-    SEAM["/ai<br/>callback, pending, health"]
+    SEAM["/ai<br/>health"]
   end
 
   subgraph EXT["Owned by the AI team — NOT in this repo"]
-    T["POST /triage<br/>RAG + red-flag rule engine"]
+    T["POST /chat<br/>RAG assistant"]
   end
 
   DB[("PostgreSQL 17<br/>records + queue + files as bytea")]
@@ -28,7 +28,7 @@ flowchart TB
   A --> AUTH & ME & CHAT & FILES
   B --> AUTH & DOC & ADM & CHAT & FILES
   CHAT -->|"conversation, conditions,<br/>hospitals, attachments"| T
-  T -.->|"sync 200, or async<br/>POST /ai/triage-callback"| SEAM
+  T -.->|"sync POST /chat"| SEAM
   T -.->|"GET /files/:id<br/>x-ai-secret"| FILES
   AUTH & ME & CHAT & DOC & ADM & FILES & SEAM --> DB
 ```
@@ -52,13 +52,8 @@ sequenceDiagram
     API-->>P: 201 { triage_pending: true }
     Note over API: fire-and-forget — a slow model never blocks send
 
-    API->>AI: POST /triage (transcript + profile + hospitals)
-    alt synchronous
-      AI-->>API: 200 result
-    else asynchronous
-      AI-->>API: 202
-      AI->>API: POST /ai/triage-callback
-    end
+    API->>AI: POST /chat (session_id + user_query)
+    AI-->>API: 200 chat response
 
     API->>API: triage_results + chat messages + visits row + audit_log
     P->>API: GET /conversations/:id/messages?after=…
